@@ -2,47 +2,70 @@
 from __future__ import annotations
 from typing import Self, Literal
 # internal
-from simple_sql_builder.shared import *
+from simple_sql_builder.shared import (
+    quote,
+    Orderable as _Orderable,
+    AliasedColumn as _AliasedColumn
+)
 from simple_sql_builder.expression import Expression
 
-class OrderColumn:
-    def __init__ (self, column: Column, order: Literal["ASC", "DESC"]) -> None:
-        self.column = column
+class Orderable (_Orderable):
+    def __init__(self, order: Literal["ASC", "DESC"], column: Column | AliasedColumn) -> None:
+        self.nulls = None
         self.order = order
-        self.__nulls: Literal["FIRST", "LAST"] | None = None
+        self.column = column
 
     def __repr__ (self) -> str:
-        return f"<OrderColumn => {self.to_sql()}>"
+        return f"<Orderable => {self.to_sql()}>"
 
     @property
     def NullsFirst (self) -> Self:
-        """Apply `NULLS FIRST`"""
-        self.__nulls = "FIRST"
+        self.nulls = "FIRST"
         return self
 
     @property
     def NullsLast (self) -> Self:
-        """Apply `NULLS LAST`"""
-        self.__nulls = "LAST"
+        self.nulls = "LAST"
         return self
 
     def to_sql (self) -> str:
-        """`SQL: alias|ta.name ASC|DESC [NULLS FIRST|LAST]` version"""
-        sql = self.column.to_sql()
+        """`SQL: (alias|ta.name) ASC|DESC [NULLS FIRST|LAST]` version"""
+        name = (
+            quote(self.column.alias)
+            if isinstance(self.column, AliasedColumn)
+            else self.column.to_sql()
+        )
         return (
-            f"{sql} {self.order}"
-            if self.__nulls is None else
-            f"{sql} {self.order} NULLS {self.__nulls}"
+            f"{name} {self.order}"
+            if self.nulls is None else
+            f"{name} {self.order} NULLS {self.nulls}"
         )
 
-class ColumnAsAlias (AliasedColumn):
+class AliasedColumn (_AliasedColumn):
     def __init__(self, column: Column, alias: str) -> None:
         self.alias = alias
         self.column = column
 
+    def __repr__ (self) -> str:
+        return f"<AliasedColumn => {self.to_sql()}>"
+
     def to_sql (self) -> str:
-        """`SQL: table_alias.name AS alias` version"""
+        """`SQL: {Column} AS {alias}`"""
         return f"{self.column.to_sql()} AS {quote(self.alias)}"
+
+    #-----------#
+    # Orderable #
+    #-----------#
+
+    @property
+    def ASC (self) -> Orderable:
+        """Apply `{alias} ASC` for `Select.Orderby`"""
+        return Orderable("ASC", self)
+
+    @property
+    def DESC (self) -> Orderable:
+        """Apply `{alias} DESC` for `Select.Orderby`"""
+        return Orderable("DESC", self)
 
 class Column (Expression):
     def __init__ (self, name: str, table_alias: str) -> None:
@@ -58,23 +81,20 @@ class Column (Expression):
 
     def As (self, alias: str) -> AliasedColumn:
         """Apply `able_alias.name AS alias`"""
-        return ColumnAsAlias(self, alias)
+        return AliasedColumn(self, alias)
 
-    #-------------#
-    # OrderColumn #
-    #-------------#
-
-    @property
-    def ASC (self) -> OrderColumn:
-        """Apply `column ASC` for `Select.Orderby`"""
-        return OrderColumn(self, "ASC")
+    #-----------#
+    # Orderable #
+    #-----------#
 
     @property
-    def DESC (self) -> OrderColumn:
-        """Apply `column DESC` for `Select.Orderby`"""
-        return OrderColumn(self, "DESC")
+    def ASC (self) -> Orderable: # type: ignore
+        """Apply `{ta.name} ASC` for `Select.Orderby`"""
+        return Orderable("ASC", self)
 
-__all__ = [
-    "Column",
-    "OrderColumn"
-]
+    @property
+    def DESC (self) -> Orderable: # type: ignore
+        """Apply `{ta.name} DESC` for `Select.Orderby`"""
+        return Orderable("DESC", self)
+
+__all__ = ["Column"]

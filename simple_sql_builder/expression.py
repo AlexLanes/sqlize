@@ -1,13 +1,17 @@
 # std
 from __future__ import annotations
-from typing import Any, Iterable
+from typing import Any, Self, Iterable, Literal
 from datetime import datetime, date
 # internal
-from simple_sql_builder.shared import *
+from simple_sql_builder.shared import (
+    quote,
+    Orderable as _Orderable,
+    AliasedColumn as _AliasedColumn
+)
 
 def to_sql_str (value: object) -> str:
     match value:
-        case AliasedExpression(): return value.to_sql()
+        case AliasedColumn(): return value.to_sql()
         case Expression(): return (
             sql
             if (sql := value.to_sql())[0] == "("
@@ -29,6 +33,52 @@ def to_sql_str (value: object) -> str:
             return f"({values})"
 
         case _: return str(value)
+
+class AliasedColumn (_AliasedColumn):
+    def __init__ (self, expression: Expression, alias: str) -> None:
+        self.alias = alias
+        self.expression = expression
+
+    def __repr__ (self) -> str:
+        return f"<AliasedColumn => {self.to_sql()}>"
+
+    def to_sql (self) -> str:
+        """`SQL: ({Expression}) AS {alias}`"""
+        alias = quote(self.alias)
+        sql = self.expression.to_sql()
+        return (
+            f"{sql} AS {alias}"
+            if sql[0] == "(" else
+            f"({sql}) AS {alias}"
+        )
+
+class Orderable (_Orderable):
+    def __init__(self, order: Literal["ASC", "DESC"], expression: Expression | AliasedColumn) -> None:
+        self.nulls = None
+        self.order = order
+        self.expression = expression
+
+    def __repr__ (self) -> str:
+        return f"<Orderable => {self.to_sql()}>"
+
+    @property
+    def NullsFirst (self) -> Self:
+        self.nulls = "FIRST"
+        return self
+
+    @property
+    def NullsLast (self) -> Self:
+        self.nulls = "LAST"
+        return self
+
+    def to_sql (self) -> str:
+        """`SQL: ({Expression}) ASC|DESC [NULLS FIRST|LAST]` version"""
+        sql = f"({self.expression.to_sql()}) {self.order}"
+        return (
+            f"{sql} NULLS {self.nulls}"
+            if self.nulls is not None
+            else sql
+        )
 
 class Expression:
     def __repr__ (self) -> str:
@@ -113,14 +163,28 @@ class Expression:
         """Apply `self % {other}`"""
         return BinaryExpression(self, "%", other)
 
+    #-----------#
+    # Orderable #
+    #-----------#
+
+    @property
+    def ASC (self) -> Orderable:
+        """Apply `({Expression}) ASC` for `Select.Orderby`"""
+        return Orderable("ASC", self)
+
+    @property
+    def DESC (self) -> Orderable:
+        """Apply `({Expression}) DESC` for `Select.Orderby`"""
+        return Orderable("DESC", self)
+
     #---------------#
     # AliasedColumn #
     #---------------#
 
-    def As (self, alias: str) -> AliasedColumn:
+    def As (self, alias: str) -> _AliasedColumn:
         """Apply `(expression) AS {alias}` to `Select()` as a Column
         - `Select( (T.orders.quantity * T.orders.value).As("Total") )`"""
-        return AliasedExpression(self, alias)
+        return AliasedColumn(self, alias)
 
 class UnaryExpression (Expression):
     def __init__ (self, operator: str, right: Any) -> None:
@@ -144,20 +208,6 @@ class BinaryExpression (Expression):
             f"({sql})"
             if self.operator in {"AND", "OR"}
             else sql
-        )
-
-class AliasedExpression (AliasedColumn):
-    def __init__ (self, expression: Expression, alias: str) -> None:
-        self.alias = alias
-        self.expression = expression
-
-    def to_sql (self) -> str:
-        alias = quote(self.alias)
-        sql = self.expression.to_sql()
-        return (
-            f"{sql} AS {alias}"
-            if sql[0] == "(" else
-            f"({sql}) AS {alias}"
         )
 
 __all__ = ["Expression"]

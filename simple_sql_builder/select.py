@@ -2,8 +2,8 @@
 from __future__ import annotations
 from typing import Self
 # internal
-from simple_sql_builder.shared     import AliasedColumn
-from simple_sql_builder.column     import Column, OrderColumn
+from simple_sql_builder.shared     import AliasedColumn, Orderable
+from simple_sql_builder.column     import Column
 from simple_sql_builder.table      import Table
 from simple_sql_builder.expression import Expression
 from simple_sql_builder.join       import Join
@@ -19,7 +19,8 @@ class Select:
     orders = T.orders
     print(
         Select(
-            users.id, users.name,
+            users.id,
+            users.name,
             orders.id.As("order_id"),
             (orders.quantity * orders.value).As("total_value")
         )
@@ -28,7 +29,8 @@ class Select:
         .Where(users.id == 1)
         .OrderBy(
             users.id.ASC,
-            T.users.name.ASC.NullsLast
+            T.users.name.ASC.NullsLast,
+            (T.users.id % 2).DESC
         )
         .Offset(0)
         .Limit(100)
@@ -43,7 +45,18 @@ class Select:
     columns: list[Column | AliasedColumn]
 
     def __init__ (self, *columns: Column | AliasedColumn) -> None:
-        """`Columns` to Select"""
+        """`Columns` to Select
+
+        ### Example
+        ```python
+        Select(
+            T.users.id,
+            T.users.name,
+            T.orders.id.As("order_id"),
+            (T.orders.quantity * T.orders.value).As("total_value")
+        )
+        ```
+        """
         if not columns:
             raise ValueError("No columns informed on Select(). Consider using Select(T.table.All())")
         self._table = None
@@ -91,14 +104,7 @@ class Select:
 
     def Join (self, table, on: Expression) -> Self:
         """Apply `INNER JOIN {table} ON {on}`
-        ```
-        (
-            Select(T.users.id, T.orders.id.As("order_id"))
-            .From(T.users)
-            .Join(T.orders, T.orders.user_id == T.users.id)
-        )
-        ```
-        """
+        - `Join(T.orders, T.orders.user_id == T.users.id)`"""
         self._joins.append(
             Join("INNER", table, on)
         )
@@ -106,14 +112,7 @@ class Select:
 
     def LeftJoin (self, table, on: Expression) -> Self:
         """Apply `LEFT JOIN {table} ON {on}`
-        ```
-        (
-            Select(T.users.id, T.orders.id.As("order_id"))
-            .From(T.users)
-            .LeftJoin(T.orders, T.orders.user_id == T.users.id)
-        )
-        ```
-        """
+        - `LeftJoin(T.orders, T.orders.user_id == T.users.id)`"""
         self._joins.append(
             Join("LEFT", table, on)
         )
@@ -121,14 +120,7 @@ class Select:
 
     def RightJoin (self, table, on: Expression) -> Self:
         """Apply `RIGHT JOIN {table} ON {on}`
-        ```
-        (
-            Select(T.users.id, T.orders.id.As("order_id"))
-            .From(T.users)
-            .RightJoin(T.orders, T.orders.user_id == T.users.id)
-        )
-        ```
-        """
+        - `RightJoin(T.orders, T.orders.user_id == T.users.id)`"""
         self._joins.append(
             Join("RIGHT", table, on)
         )
@@ -136,14 +128,7 @@ class Select:
 
     def FullJoin (self, table, on: Expression) -> Self:
         """Apply `FULL JOIN {table} ON {on}`
-        ```
-        (
-            Select(T.users.id, T.orders.id.As("order_id"))
-            .From(T.users)
-            .FullJoin(T.orders, T.orders.user_id == T.users.id)
-        )
-        ```
-        """
+        - `FullJoin(T.orders, T.orders.user_id == T.users.id)`"""
         self._joins.append(
             Join("FULL", table, on)
         )
@@ -164,7 +149,7 @@ class Select:
             - `AND`: `(exp) & (exp)`
             - `NOT`: `(exp).Not()`
 
-        ## Example
+        ### Examples
         ```python
         users = T.users
         Where(users.id == 1)
@@ -180,20 +165,23 @@ class Select:
     # ORDERBY #
     #---------#
 
-    _orders: list[OrderColumn]
+    _orders: list[Orderable]
 
-    def OrderBy (self, *columns: OrderColumn) -> Self:
-        """Apply `ORDER BY columns`
+    def OrderBy (self, *o: Orderable) -> Self:
+        """Apply `ORDER BY {o}`
+
+        ### Example
         ```python
         Select(T.users.All())
         .From(T.users)
         .OrderBy(
             T.users.id.ASC,
-            T.users.name.DESC.NullsFirst
+            T.users.name.DESC.NullsFirst,
+            (T.users.id % 2).DESC
         )
         ```
         """
-        self._orders.extend(columns)
+        self._orders.extend(o)
         return self
 
     #------#
