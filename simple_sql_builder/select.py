@@ -142,7 +142,7 @@ class Select:
 
     def Where (self, expression: Expression) -> Self:
         """Apply `WHERE {expression}`
-        - Comparable `Expressions`: `= != > < >= <= .In()`
+        - Comparable `Expressions`: `= != > < >= <= .In() .Like() .ILike()`
         - Arithmetic `Expressions`: `+ - * / %`
         - Logical `Expressions`
             - `OR`:  `(exp) | (exp)`

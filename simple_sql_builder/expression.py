@@ -11,7 +11,7 @@ from simple_sql_builder.shared import (
 
 OPERATORS_FOR_PARENTESIS = {
     "IN", "NOT", "AND", "OR",
-    *"+-/*%"
+    "/", "*"
 }
 
 def to_sql_str (value: object) -> str:
@@ -131,6 +131,14 @@ class Expression:
     def In (self, values: Iterable[Any]) -> Expression:
         """Apply `self IN {(values)}`"""
         return BinaryExpression(self, "IN", tuple(values))
+
+    def Like (self, t: str | Expression) -> Expression:
+        """Apply `self LIKE {t}`"""
+        return BinaryExpression(self, "LIKE", t)
+
+    def ILike (self, t: str | Expression) -> Expression:
+        """Apply `self ILIKE {t}`"""
+        return BinaryExpression(self, "ILIKE", t)
 
     #-----------------------#
     # Arithmetic Expression #
