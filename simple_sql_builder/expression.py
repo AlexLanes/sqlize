@@ -222,6 +222,11 @@ class Expression:
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("COALESCE", self, exp_or_value)
 
+    def Replace (self, search: Expression | str, replacement: Expression | str) -> Expression:
+        """Apply `REPLACE(Expression, search, replacement)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("REPLACE", self, search, replacement)
+
 class NamedFunctionExpression (Expression):
     def __init__ (self, name: str, *args: Any) -> None:
         self.name = name
