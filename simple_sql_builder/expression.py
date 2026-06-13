@@ -9,20 +9,19 @@ from simple_sql_builder.shared import (
     AliasedColumn as _AliasedColumn
 )
 
+OPERATORS_FOR_PARENTESIS = {
+    "IN", "NOT", "AND", "OR",
+    *"+-/*%"
+}
+
 def to_sql_str (value: object) -> str:
     match value:
-        case AliasedColumn(): return value.to_sql()
-        case Expression(): return (
-            sql
-            if (sql := value.to_sql())[0] == "("
-            else f"({sql})"
-        )
+        case Expression() | AliasedColumn(): return value.to_sql()
 
         case None:  return "NULL"
         case True:  return "TRUE"
         case False: return "FALSE"
         case str(): return repr(value)
-
         case date():
             return repr(value.isoformat())
         case datetime():
@@ -44,13 +43,7 @@ class AliasedColumn (_AliasedColumn):
 
     def to_sql (self) -> str:
         """`SQL: ({Expression}) AS {alias}`"""
-        alias = quote(self.alias)
-        sql = self.expression.to_sql()
-        return (
-            f"{sql} AS {alias}"
-            if sql[0] == "(" else
-            f"({sql}) AS {alias}"
-        )
+        return f"({self.expression.to_sql()}) AS {quote(self.alias)}"
 
 class Orderable (_Orderable):
     def __init__(self, order: Literal["ASC", "DESC"], expression: Expression | AliasedColumn) -> None:
@@ -91,7 +84,7 @@ class Expression:
     # Logical Expression #
     #--------------------#
 
-    def __or__ (self, expression: Expression) -> Expression:
+    def __or__ (self, expression: Expression | str) -> Expression:
         """Apply `(self OR {expression})`"""
         return BinaryExpression(self, "OR", expression)
 
@@ -169,12 +162,12 @@ class Expression:
 
     @property
     def ASC (self) -> Orderable:
-        """Apply `({Expression}) ASC` for `Select.Orderby`"""
+        """Apply `(Expression) ASC` for `Select.Orderby`"""
         return Orderable("ASC", self)
 
     @property
     def DESC (self) -> Orderable:
-        """Apply `({Expression}) DESC` for `Select.Orderby`"""
+        """Apply `(Expression) DESC` for `Select.Orderby`"""
         return Orderable("DESC", self)
 
     #---------------#
@@ -182,9 +175,53 @@ class Expression:
     #---------------#
 
     def As (self, alias: str) -> _AliasedColumn:
-        """Apply `(expression) AS {alias}` to `Select()` as a Column
+        """Apply `(Expression) AS {alias}` to `Select()` as a Column
         - `Select( (T.orders.quantity * T.orders.value).As("Total") )`"""
         return AliasedColumn(self, alias)
+
+    #-----------#
+    # Functions #
+    #-----------#
+
+    def Upper (self) -> Expression:
+        """Apply `UPPER(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("UPPER", self)
+
+    def Lower (self) -> Expression:
+        """Apply `LOWER(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("LOWER", self)
+
+    def Length (self) -> Expression:
+        """Apply `LENGTH(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("LENGTH", self)
+
+    def Substring (self, start: int, length: int | None = None) -> Expression:
+        """Apply `SUBSTRING(Expression, start, [length])`
+        - Use `.As(alias)` to Select as a Column"""
+        args = (start,) if length is None else (start, length)
+        return NamedFunctionExpression("SUBSTRING", self, *args)
+
+    def Trim (self) -> Expression:
+        """Apply `TRIM(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("TRIM", self)
+
+    def Coalesce (self, exp_or_value: Expression | Any) -> Expression:
+        """Apply `COALESCE(Expression, exp_or_value)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("COALESCE", self, exp_or_value)
+
+class NamedFunctionExpression (Expression):
+    def __init__ (self, name: str, *args: Any) -> None:
+        self.name = name
+        self.args = args
+
+    def to_sql (self) -> str:
+        args = ", ".join(map(to_sql_str, self.args))
+        return f"{self.name}({args})"
 
 class UnaryExpression (Expression):
     def __init__ (self, operator: str, right: Any) -> None:
@@ -193,7 +230,11 @@ class UnaryExpression (Expression):
 
     def to_sql (self) -> str:
         r = to_sql_str(self.right)
-        return f"NOT ({r})"
+        return (
+            f"{self.operator} ({r})"
+            if self.operator in OPERATORS_FOR_PARENTESIS
+            else f"{self.operator} {r}"
+        )
 
 class BinaryExpression (Expression):
     def __init__ (self, left: Any, operator: str, right: Any) -> None:
@@ -206,7 +247,7 @@ class BinaryExpression (Expression):
         sql = f"{l} {self.operator} {r}"
         return (
             f"({sql})"
-            if self.operator in {"AND", "OR"}
+            if self.operator in OPERATORS_FOR_PARENTESIS
             else sql
         )
 
