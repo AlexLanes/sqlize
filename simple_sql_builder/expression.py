@@ -221,26 +221,48 @@ class Expression:
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("LENGTH", self)
 
+    def Trim (self) -> Expression:
+        """Apply `TRIM(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("TRIM", self)
+
     def Substring (self, start: int, length: int | None = None) -> Expression:
         """Apply `SUBSTRING(Expression, start, [length])`
         - Use `.As(alias)` to Select as a Column"""
         args = (start,) if length is None else (start, length)
         return NamedFunctionExpression("SUBSTRING", self, *args)
 
-    def Trim (self) -> Expression:
-        """Apply `TRIM(Expression)`
+    def Coalesce (self, default: ExpOrValue) -> Expression:
+        """Apply `COALESCE(Expression, default)`
         - Use `.As(alias)` to Select as a Column"""
-        return NamedFunctionExpression("TRIM", self)
+        return NamedFunctionExpression("COALESCE", self, default)
 
-    def Coalesce (self, exp_or_value: Expression | Any) -> Expression:
-        """Apply `COALESCE(Expression, exp_or_value)`
-        - Use `.As(alias)` to Select as a Column"""
-        return NamedFunctionExpression("COALESCE", self, exp_or_value)
-
-    def Replace (self, search: Expression | str, replacement: Expression | str) -> Expression:
+    def Replace (self, search: ExpOrString, replacement: ExpOrString) -> Expression:
         """Apply `REPLACE(Expression, search, replacement)`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("REPLACE", self, search, replacement)
+
+    def Concat (self, *v: ExpOrValue) -> Expression:
+        """Apply `CONCAT(self, v...)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("CONCAT", self, *v)
+
+    def ConcatWithChar (self, *v: ExpOrValue, char: Literal["||", "+"] | str = "||") -> Expression:
+        """Apply `self {char} v...)`
+        - Use `.As(alias)` to Select as a Column"""
+        return ConcatExpression(char, self, *v)
+
+class ConcatExpression (Expression):
+    def __init__ (self, char: str, *args: ExpOrValue) -> None:
+        self.char = char
+        self.args = args
+
+    def to_sql (self) -> str:
+        return f" {self.char} ".join(
+            to_sql_str(arg)
+            for arg in self.args
+            if arg is not E
+        )
 
 class CaseExpression (Expression):
     def __init__ (self, exp: Expression) -> None:
@@ -263,7 +285,9 @@ class CaseExpression (Expression):
         return " ".join(
             line
             for line in (
-                f"CASE {to_sql_str(self.exp)}",
+                f"CASE {to_sql_str(self.exp)}"
+                if self.exp is not E
+                else "CASE",
 
                 *[f"WHEN {to_sql_str(when)} THEN {to_sql_str(then)}"
                   for when, then in self.cases],
@@ -282,7 +306,11 @@ class NamedFunctionExpression (Expression):
         self.args = args
 
     def to_sql (self) -> str:
-        args = ", ".join(map(to_sql_str, self.args))
+        args = ", ".join(
+            to_sql_str(arg)
+            for arg in self.args
+            if arg is not E
+        )
         return f"{self.name}({args})"
 
 class UnaryExpression (Expression):
@@ -326,4 +354,10 @@ class BetweenExpression (Expression):
             f"AND {to_sql_str(self.high)})",
         ))
 
-__all__ = ["Expression"]
+type EmptyExpression = Expression
+E: EmptyExpression = Expression()
+"""`Expression` to build a `Expression` from a empty state
+- `E.Case()`
+- `E.Concat('->', ' ', '<-')`"""
+
+__all__ = ["Expression", "E"]
