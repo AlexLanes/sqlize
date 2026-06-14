@@ -5,7 +5,7 @@ def quote (s: str) -> str:
     """Quote `s` if contains space"""
     return f'"{s}"' if " " in s else s
 
-class Orderable (Protocol):
+class OrderableExpression (Protocol):
     """Interface for a `Column` or `Expression` to be `ORDER BY`"""
 
     order: Literal["ASC", "DESC"]
@@ -36,6 +36,6 @@ class AliasedColumn (Protocol):
 
 __all__ = [
     "quote",
-    "Orderable",
     "AliasedColumn",
+    "OrderableExpression",
 ]

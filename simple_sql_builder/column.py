@@ -4,12 +4,12 @@ from typing import Self, Literal
 # internal
 from simple_sql_builder.shared import (
     quote,
-    Orderable as _Orderable,
+    OrderableExpression,
     AliasedColumn as _AliasedColumn
 )
 from simple_sql_builder.expression import Expression
 
-class Orderable (_Orderable):
+class Orderable (OrderableExpression):
     def __init__(self, order: Literal["ASC", "DESC"], column: Column | AliasedColumn) -> None:
         self.nulls = None
         self.order = order

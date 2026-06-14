@@ -8,7 +8,7 @@ from typing import (
 # internal
 from simple_sql_builder.shared import (
     quote,
-    Orderable as _Orderable,
+    OrderableExpression,
     AliasedColumn as _AliasedColumn
 )
 
@@ -52,7 +52,7 @@ class AliasedColumn (_AliasedColumn):
         """`SQL: ({Expression}) AS {alias}`"""
         return f"({self.expression.to_sql()}) AS {self.alias}"
 
-class Orderable (_Orderable):
+class Orderable (OrderableExpression):
     def __init__(self, order: Literal["ASC", "DESC"], expression: Expression | AliasedColumn) -> None:
         self.nulls = None
         self.order = order
@@ -92,6 +92,16 @@ class Expression:
 
     def to_sql (self) -> str:
         raise NotImplementedError
+
+    @classmethod
+    def Value (cls, value: Any) -> Expression:
+        """Create a `Expression` from a Literal `value`"""
+        if isinstance(value, Expression):
+            raise TypeError(f"Expression.Value(value) should be a Literal Value not a Expression")
+
+        e = cls()
+        e.to_sql = lambda *_: to_sql_str(value)
+        return e
 
     #--------------------#
     # Logical Expression #
