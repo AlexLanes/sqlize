@@ -9,6 +9,10 @@ from simple_sql_builder.shared import (
     AliasedColumn as _AliasedColumn
 )
 
+type ExpOrValue = Expression | Any
+type ExpOrString = Expression | str
+
+NOT_SET = object()
 OPERATORS_FOR_PARENTESIS = {
     "IN", "NOT", "AND", "OR",
     "/", "*"
@@ -84,7 +88,7 @@ class Expression:
     # Logical Expression #
     #--------------------#
 
-    def __or__ (self, expression: Expression | str) -> Expression:
+    def __or__ (self, expression: Expression) -> Expression:
         """Apply `(self OR {expression})`"""
         return BinaryExpression(self, "OR", expression)
 
@@ -97,72 +101,83 @@ class Expression:
         return UnaryExpression("NOT", self)
 
     #-----------------------#
+    # Arithmetic Expression #
+    #-----------------------#
+
+    def __add__ (self, other: ExpOrValue) -> Expression:
+        """Apply `self + {other}`"""
+        return BinaryExpression(self, "+", other)
+
+    def __sub__ (self, other: ExpOrValue) -> Expression:
+        """Apply `self - {other}`"""
+        return BinaryExpression(self, "-", other)
+
+    def __mul__ (self, other: ExpOrValue) -> Expression:
+        """Apply `self * {other}`"""
+        return BinaryExpression(self, "*", other)
+
+    def __truediv__ (self, other: ExpOrValue) -> Expression:
+        """Apply `self / {other}`"""
+        return BinaryExpression(self, "/", other)
+
+    def __mod__ (self, other: ExpOrValue) -> Expression:
+        """Apply `self % {other}`"""
+        return BinaryExpression(self, "%", other)
+
+    #-----------------------#
     # Comparable Expression #
     #-----------------------#
 
-    def __eq__ (self, other: object) -> Expression: # type: ignore
+    def __eq__ (self, other: ExpOrValue) -> Expression: # type: ignore
         """Apply `self = {other}`"""
         if other is None:
             return BinaryExpression(self, "IS", None)
         return BinaryExpression(self, "=", other)
 
-    def __ne__ (self, other: object) -> Expression: # type: ignore
+    def __ne__ (self, other: ExpOrValue) -> Expression: # type: ignore
         """Apply `self != {other}`"""
         if other is None:
             return BinaryExpression(self, "IS NOT", None)
         return BinaryExpression(self, "!=", other)
 
-    def __gt__ (self, other: object) -> Expression:
+    def __gt__ (self, other: ExpOrValue) -> Expression:
         """Apply `self > {other}`"""
         return BinaryExpression(self, ">", other)
 
-    def __lt__ (self, other: object) -> Expression:
+    def __lt__ (self, other: ExpOrValue) -> Expression:
         """Apply `self < {other}`"""
         return BinaryExpression(self, "<", other)
 
-    def __ge__ (self, other: object) -> Expression:
+    def __ge__ (self, other: ExpOrValue) -> Expression:
         """Apply `self >= {other}`"""
         return BinaryExpression(self, ">=", other)
 
-    def __le__ (self, other: object) -> Expression:
+    def __le__ (self, other: ExpOrValue) -> Expression:
         """Apply `self <= {other}`"""
         return BinaryExpression(self, "<=", other)
 
-    def In (self, values: Iterable[Any]) -> Expression:
+    def In (self, values: Iterable[ExpOrValue]) -> Expression:
         """Apply `self IN {(values)}`"""
         return BinaryExpression(self, "IN", tuple(values))
 
-    def Like (self, t: str | Expression) -> Expression:
-        """Apply `self LIKE {t}`"""
+    def Like (self, t: ExpOrString) -> Expression:
+        """Apply `self LIKE {t}`
+        - Use `.As(alias)` to Select as a Column"""
         return BinaryExpression(self, "LIKE", t)
 
-    def ILike (self, t: str | Expression) -> Expression:
-        """Apply `self ILIKE {t}`"""
+    def ILike (self, t: ExpOrString) -> Expression:
+        """Apply `self ILIKE {t}`
+        - Use `.As(alias)` to Select as a Column"""
         return BinaryExpression(self, "ILIKE", t)
 
-    #-----------------------#
-    # Arithmetic Expression #
-    #-----------------------#
+    def Between (self, low: ExpOrValue, high: ExpOrValue) -> Expression:
+        """Apply `self BETWEEN {low} AND {high}`
+        - Use `.As(alias)` to Select as a Column"""
+        return BetweenExpression(self, low, high)
 
-    def __add__ (self, other: object) -> Expression:
-        """Apply `self + {other}`"""
-        return BinaryExpression(self, "+", other)
-
-    def __sub__ (self, other: object) -> Expression:
-        """Apply `self - {other}`"""
-        return BinaryExpression(self, "-", other)
-
-    def __mul__ (self, other: object) -> Expression:
-        """Apply `self * {other}`"""
-        return BinaryExpression(self, "*", other)
-
-    def __truediv__ (self, other: object) -> Expression:
-        """Apply `self / {other}`"""
-        return BinaryExpression(self, "/", other)
-
-    def __mod__ (self, other: object) -> Expression:
-        """Apply `self % {other}`"""
-        return BinaryExpression(self, "%", other)
+    def Case (self) -> CaseExpression:
+        """Builder of `CASE {Expression} WHEN`"""
+        return CaseExpression(self)
 
     #-----------#
     # Orderable #
@@ -227,8 +242,42 @@ class Expression:
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("REPLACE", self, search, replacement)
 
+class CaseExpression (Expression):
+    def __init__ (self, exp: Expression) -> None:
+        self.exp = exp
+        self.cases = list[tuple[ExpOrValue, ExpOrValue]]()
+        self._default = NOT_SET
+
+    def When (self, when: ExpOrValue, then: ExpOrValue) -> CaseExpression:
+        """Apply `WHEN {when} THEN {then}`"""
+        self.cases.append((when, then))
+        return self
+
+    def Else (self, value: ExpOrValue) -> Expression:
+        """Apply `ELSE {value}`
+        - Use `.As(alias)` to Select as a Column"""
+        self._default = value
+        return self
+
+    def to_sql (self) -> str:
+        return " ".join(
+            line
+            for line in (
+                f"CASE {to_sql_str(self.exp)}",
+
+                *[f"WHEN {to_sql_str(when)} THEN {to_sql_str(then)}"
+                  for when, then in self.cases],
+
+                "" if self._default is NOT_SET
+                else f"ELSE {to_sql_str(self._default)}",
+
+                "END"
+            )
+            if line
+        )
+
 class NamedFunctionExpression (Expression):
-    def __init__ (self, name: str, *args: Any) -> None:
+    def __init__ (self, name: str, *args: ExpOrValue) -> None:
         self.name = name
         self.args = args
 
@@ -237,7 +286,7 @@ class NamedFunctionExpression (Expression):
         return f"{self.name}({args})"
 
 class UnaryExpression (Expression):
-    def __init__ (self, operator: str, right: Any) -> None:
+    def __init__ (self, operator: str, right: ExpOrValue) -> None:
         self.right = right
         self.operator = operator
 
@@ -250,7 +299,7 @@ class UnaryExpression (Expression):
         )
 
 class BinaryExpression (Expression):
-    def __init__ (self, left: Any, operator: str, right: Any) -> None:
+    def __init__ (self, left: ExpOrValue, operator: str, right: ExpOrValue) -> None:
         self.operator = operator
         self.left, self.right = left, right
 
@@ -263,5 +312,18 @@ class BinaryExpression (Expression):
             if self.operator in OPERATORS_FOR_PARENTESIS
             else sql
         )
+
+class BetweenExpression (Expression):
+    def __init__ (self, exp: Expression, low: ExpOrValue, high: ExpOrValue) -> None:
+        self.exp = exp
+        self.low = low
+        self.high = high
+
+    def to_sql (self) -> str:
+        return " ".join((
+            f"({to_sql_str(self.exp)}",
+            f"BETWEEN {to_sql_str(self.low)}",
+            f"AND {to_sql_str(self.high)})",
+        ))
 
 __all__ = ["Expression"]
