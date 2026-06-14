@@ -41,6 +41,7 @@ class Select:
     ```
     """
 
+    _distinct: bool
     _table: Table | None
     columns: list[Column | AliasedColumn]
 
@@ -60,16 +61,23 @@ class Select:
         if not columns:
             raise ValueError("No columns informed on Select(). Consider using Select(T.table.All())")
         self._table = None
+        self._distinct = False
         self.columns = list(columns)
         self._page, self._orders = [], []
         self._joins, self._expression = [], None
 
     def __repr__ (self) -> str:
+        d = " DISTINCT " if self._distinct else " "
         return (
-            f"<Select FROM {self._table.to_sql()}>"
+            f"<Select{d}FROM {self._table.to_sql()}>"
             if self._table else 
-            "<Select empty>"
+            f"<Select{d}empty>"
         )
+
+    def Distinct (self) -> Self:
+        """Apply `SELECT DISTINCT`"""
+        self._distinct = True
+        return self
 
     def From (self, table: Table) -> Self:
         """Add `table` to Select `FROM`"""
@@ -81,12 +89,13 @@ class Select:
         if self._table is None:
             raise ValueError("Table not set on Select.From(Table)")
 
-        select = ", ".join(c.to_sql() for c in self.columns)
+        select = "SELECT DISTINCT" if self._distinct else "SELECT"
+        columns = ", ".join(c.to_sql() for c in self.columns)
         orderby = ", ".join(c.to_sql() for c in self._orders)
         return "\n".join(
             line
             for line in (
-                f"SELECT {select}",
+                f"{select} {columns}",
                 f"FROM {self._table.to_sql()}",
                 "\n".join(j.to_sql() for j in self._joins),
                 f"WHERE {self._expression.to_sql()}" if self._expression is not None else "",
