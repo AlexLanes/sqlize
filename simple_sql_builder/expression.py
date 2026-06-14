@@ -1,7 +1,10 @@
 # std
 from __future__ import annotations
-from typing import Any, Self, Iterable, Literal
 from datetime import datetime, date
+from typing import (
+    Any, Self,
+    Iterable, Literal, NoReturn
+)
 # internal
 from simple_sql_builder.shared import (
     quote,
@@ -81,6 +84,12 @@ class Expression:
     def __repr__ (self) -> str:
         return f"<Expression => {self.to_sql()}>"
 
+    def __bool__(self) -> NoReturn:
+        raise TypeError(
+            "SQL expressions cannot be used as bool. "
+            "Consider using .Not() for negation"
+        )
+
     def to_sql (self) -> str:
         raise NotImplementedError
 
@@ -88,13 +97,23 @@ class Expression:
     # Logical Expression #
     #--------------------#
 
-    def __or__ (self, expression: Expression) -> Expression:
-        """Apply `(self OR {expression})`"""
-        return BinaryExpression(self, "OR", expression)
+    def __or__ (self, exp: Expression) -> Expression:
+        """Apply `(self OR {exp})`"""
+        return BinaryExpression(self, "OR", exp)
 
-    def __and__ (self, expression: Expression) -> Expression:
-        """Apply `(self AND {expression})`"""
-        return BinaryExpression(self, "AND", expression)
+    def Or (self, exp: Expression) -> Expression:
+        """Apply `(self OR {exp})`
+        - Same as `self | exp`"""
+        return BinaryExpression(self, "OR", exp)
+
+    def __and__ (self, exp: Expression) -> Expression:
+        """Apply `(self AND {exp})`"""
+        return BinaryExpression(self, "AND", exp)
+
+    def And (self, exp: Expression) -> Expression:
+        """Apply `(self AND {exp})`
+        - Same as `self & exp`"""
+        return BinaryExpression(self, "AND", exp)
 
     def Not (self) -> Expression:
         """Apply `NOT ({expression})`"""
@@ -303,12 +322,12 @@ class ConcatExpression (Expression):
 class CaseExpression (Expression):
     def __init__ (self, exp: Expression) -> None:
         self.exp = exp
-        self.cases = list[tuple[ExpOrValue, ExpOrValue]]()
+        self._cases = list[tuple[ExpOrValue, ExpOrValue]]()
         self._default = NOT_SET
 
     def When (self, when: ExpOrValue, then: ExpOrValue) -> CaseExpression:
         """Apply `WHEN {when} THEN {then}`"""
-        self.cases.append((when, then))
+        self._cases.append((when, then))
         return self
 
     def Else (self, value: ExpOrValue) -> Expression:
@@ -326,7 +345,7 @@ class CaseExpression (Expression):
                 else "CASE",
 
                 *[f"WHEN {to_sql_str(when)} THEN {to_sql_str(then)}"
-                  for when, then in self.cases],
+                  for when, then in self._cases],
 
                 "" if self._default is NOT_SET
                 else f"ELSE {to_sql_str(self._default)}",

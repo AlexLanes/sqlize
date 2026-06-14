@@ -26,7 +26,7 @@ class Select:
         )
         .From(users)
         .Join(T.orders, orders.user_id == users.id)
-        .Where(users.id == 1)
+        .Where( (users.id == 1) | (users.role.Upper() == "ADMIN") )
         .OrderBy(
             users.id.ASC,
             T.users.name.ASC.NullsLast,
@@ -89,7 +89,7 @@ class Select:
                 f"SELECT {select}",
                 f"FROM {self._table.to_sql()}",
                 "\n".join(j.to_sql() for j in self._joins),
-                f"WHERE {self._expression.to_sql()}" if self._expression else "",
+                f"WHERE {self._expression.to_sql()}" if self._expression is not None else "",
                 f"ORDER BY {orderby}" if orderby else "",
                 "\n".join(sql.format(value=value) for _, sql, value in sorted(self._page))
             )
@@ -142,14 +142,28 @@ class Select:
 
     def Where (self, expression: Expression) -> Self:
         """Apply `WHERE {expression}`
-        - Comparable `Expressions`: `= != > < >= <= .In() .Like() .ILike()`
-        - Arithmetic `Expressions`: `+ - * / %`
-        - Logical `Expressions`
-            - `OR`:  `(exp) | (exp)`
-            - `AND`: `(exp) & (exp)`
-            - `NOT`: `(exp).Not()`
 
-        ### Examples
+        ## Arithmetic `Expressions`
+        `+ - * / %`
+
+        ## Comparable `Expressions`
+        **Operators** `==` `!=` `>` `<` `>=` `<=`  
+        **Methods** `In()` `Like()` `ILike()` `Between()` `Case()`
+
+        ## Logical `Expressions`
+        **OR**  `(exp) | (exp)` `exp.Or(exp)`  
+        **AND** `(exp) & (exp)` `exp.And(exp)`  
+        **NOT** `(exp).Not()`
+
+        ## Functions `Expressions`
+        `Upper()` `Lower()` `Length()` `Trim()`   
+        `Substring()` `Coalesce()` `Replace()` `Concat()`
+
+        ## Constants `Expression`
+        `CURRENT_DATE` `CURRENT_TIME` `CURRENT_TIMESTAMP`  
+        `LOCAL_TIME` `LOCAL_TIMESTAMP`
+
+        # Examples
         ```python
         users = T.users
         Where(users.id == 1)
@@ -170,7 +184,7 @@ class Select:
     def OrderBy (self, *o: Orderable) -> Self:
         """Apply `ORDER BY {o}`
 
-        ### Example
+        ## Example
         ```python
         Select(T.users.All())
         .From(T.users)
