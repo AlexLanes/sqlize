@@ -42,7 +42,7 @@ def to_sql_str (value: object) -> str:
 
 class AliasedColumn (_AliasedColumn):
     def __init__ (self, expression: Expression, alias: str) -> None:
-        self.alias = alias
+        self.alias = quote(alias)
         self.expression = expression
 
     def __repr__ (self) -> str:
@@ -50,7 +50,7 @@ class AliasedColumn (_AliasedColumn):
 
     def to_sql (self) -> str:
         """`SQL: ({Expression}) AS {alias}`"""
-        return f"({self.expression.to_sql()}) AS {quote(self.alias)}"
+        return f"({self.expression.to_sql()}) AS {self.alias}"
 
 class Orderable (_Orderable):
     def __init__(self, order: Literal["ASC", "DESC"], expression: Expression | AliasedColumn) -> None:
@@ -465,9 +465,35 @@ class BetweenExpression (Expression):
 
 type EmptyExpression = Expression
 E: EmptyExpression = Expression()
-"""`Expression` to build a `Expression` from a empty state
-- `E.Case()`
-- `E.Concat("(", column, ")")`
-- `E.CURRENT_TIMESTAMP`"""
+"""Build a `Expression` from a empty state
+#### A `Column` is a `Expression`
+<br>
+
+## Arithmetic `Expressions`
+`+ - * / %`
+
+## Comparable `Expressions`
+**Operators** `==` `!=` `>` `<` `>=` `<=`  
+**Methods** `In()` `Like()` `ILike()` `Between()` `Case()`
+
+## Logical `Expressions`
+**OR**  `(exp) | (exp)` `exp.Or(exp)`  
+**AND** `(exp) & (exp)` `exp.And(exp)`  
+**NOT** `exp.Not()`
+
+## Functions `Expressions`
+`Upper()` `Lower()` `Length()` `Trim()`   
+`Substring()` `Coalesce()` `Replace()` `Concat()`  
+`Abs()` `Ceil()` `Floor()` `Round()`
+
+## Group `Expressions`
+`Count()`  
+`Min()` `Max()`  
+`Sum()` `Avg()`
+
+## Constants `Expression`
+`CURRENT_DATE` `CURRENT_TIME` `CURRENT_TIMESTAMP`  
+`LOCAL_TIME` `LOCAL_TIMESTAMP`
+"""
 
 __all__ = ["Expression", "E"]

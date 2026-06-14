@@ -31,7 +31,7 @@ class Orderable (_Orderable):
     def to_sql (self) -> str:
         """`SQL: (alias|ta.name) ASC|DESC [NULLS FIRST|LAST]` version"""
         name = (
-            quote(self.column.alias)
+            self.column.alias
             if isinstance(self.column, AliasedColumn)
             else self.column.to_sql()
         )
@@ -41,29 +41,33 @@ class Orderable (_Orderable):
             f"{name} {self.order} NULLS {self.nulls}"
         )
 
-class AliasedColumn (_AliasedColumn):
-    def __init__(self, column: Column, alias: str) -> None:
-        self.alias = alias
+class AliasedColumn (_AliasedColumn, Expression):
+    def __init__(self, column: Column | None, alias: str) -> None:
         self.column = column
+        self.alias = quote(alias)
 
     def __repr__ (self) -> str:
         return f"<AliasedColumn => {self.to_sql()}>"
 
     def to_sql (self) -> str:
-        """`SQL: {Column} AS {alias}`"""
-        return f"{self.column.to_sql()} AS {quote(self.alias)}"
+        """`SQL: [{Column} AS] {alias}`"""
+        return (
+            f"{self.column.to_sql()} AS {self.alias}"
+            if self.column is not None
+            else self.alias
+        )
 
     #-----------#
     # Orderable #
     #-----------#
 
     @property
-    def ASC (self) -> Orderable:
+    def ASC (self) -> Orderable: # type: ignore
         """Apply `{alias} ASC` for `Select.Orderby`"""
         return Orderable("ASC", self)
 
     @property
-    def DESC (self) -> Orderable:
+    def DESC (self) -> Orderable: # type: ignore
         """Apply `{alias} DESC` for `Select.Orderby`"""
         return Orderable("DESC", self)
 
@@ -97,4 +101,24 @@ class Column (Expression):
         """Apply `{ta.name} DESC` for `Select.Orderby`"""
         return Orderable("DESC", self)
 
-__all__ = ["Column"]
+class AliasedColumnBuilder:
+    def __call__ (self, alias: str) -> AliasedColumn:
+        return AliasedColumn(None, alias)
+
+    def __getattr__ (self, alias: str) -> AliasedColumn:
+        return self.__call__(alias)
+
+    def All (self) -> AliasedColumn:
+        """`*`"""
+        return self.__call__("*")
+
+A = AliasedColumnBuilder()
+"""Creator of `AliasedColumn`  
+Can be used on `Where` `GroupBy` `OrderBy` to reference a `Column(name).As(alias)`
+
+`A.All()`  
+`A.custom_name`  
+`A("custom name")`
+"""
+
+__all__ = ["Column", "A"]

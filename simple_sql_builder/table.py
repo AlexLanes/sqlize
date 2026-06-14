@@ -85,17 +85,16 @@ class TableBuilder:
 T = TableBuilder()
 """Creator of `Table`
 
-```python
-# Creating table
-users = T.users
-T("users", "public")
-T.users.Schema("public")
+### Creating Table
+`users = T.users`  
+`T("users", "public")`  
+`T.users.Schema("public")`
 
-# Creating columns
-users.id
-users.All()
-T.users.column("name")
-users.email.As("e-mail")
-```
+### Creating Column
+`users.id`  
+`users.All()`  
+`T.users.Column("name")`  
+`users.email.As("e-mail")`
 """
-__all__ = ["T"]
+
+__all__ = ["Table", "T"]

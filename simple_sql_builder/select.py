@@ -11,7 +11,7 @@ from simple_sql_builder.join       import Join
 class Select:
     """Builder of `Select` statement
 
-    ### Example
+    # Example
     ```python
     from simple_sql_builder import T, Select
 
@@ -60,9 +60,12 @@ class Select:
         """
         if not columns:
             raise ValueError("No columns informed on Select(). Consider using Select(T.table.All())")
+
         self._table = None
         self._distinct = False
         self.columns = list(columns)
+
+        self._groups = ([], [])
         self._page, self._orders = [], []
         self._joins, self._expression = [], None
 
@@ -89,9 +92,17 @@ class Select:
         if self._table is None:
             raise ValueError("Table not set on Select.From(Table)")
 
-        select = "SELECT DISTINCT" if self._distinct else "SELECT"
+        select  = "SELECT DISTINCT" if self._distinct else "SELECT"
         columns = ", ".join(c.to_sql() for c in self.columns)
         orderby = ", ".join(c.to_sql() for c in self._orders)
+        groupby, having = (
+            ", ".join(
+                exp.to_sql() if isinstance(exp, Expression) else exp.alias
+                for exp in item
+            )
+            for item in self._groups
+        )
+
         return "\n".join(
             line
             for line in (
@@ -99,6 +110,8 @@ class Select:
                 f"FROM {self._table.to_sql()}",
                 "\n".join(j.to_sql() for j in self._joins),
                 f"WHERE {self._expression.to_sql()}" if self._expression is not None else "",
+                f"GROUP BY {groupby}" if groupby else "",
+                f"HAVING {having}"    if having  else "",
                 f"ORDER BY {orderby}" if orderby else "",
                 "\n".join(sql.format(value=value) for _, sql, value in sorted(self._page))
             )
@@ -151,37 +164,34 @@ class Select:
 
     def Where (self, expression: Expression) -> Self:
         """Apply `WHERE {expression}`
+        #### A `Column` is a `Expression`
+        #### See `E` docstring for more info
+        <br>
 
-        ## Arithmetic `Expressions`
-        `+ - * / %`
-
-        ## Comparable `Expressions`
-        **Operators** `==` `!=` `>` `<` `>=` `<=`  
-        **Methods** `In()` `Like()` `ILike()` `Between()` `Case()`
-
-        ## Logical `Expressions`
-        **OR**  `(exp) | (exp)` `exp.Or(exp)`  
-        **AND** `(exp) & (exp)` `exp.And(exp)`  
-        **NOT** `(exp).Not()`
-
-        ## Functions `Expressions`
-        `Upper()` `Lower()` `Length()` `Trim()`   
-        `Substring()` `Coalesce()` `Replace()` `Concat()`
-
-        ## Constants `Expression`
-        `CURRENT_DATE` `CURRENT_TIME` `CURRENT_TIMESTAMP`  
-        `LOCAL_TIME` `LOCAL_TIMESTAMP`
-
-        # Examples
-        ```python
-        users = T.users
-        Where(users.id == 1)
-        Where( (users.id % 2 == 0) )
-        Where( (users.role == "admin").Not() )
-        Where( (users.role == "admin") & (users.name != None) )
-        ```
+        ### Examples
+        `users = T.users`  
+        `Where(users.id == 1)`  
+        `Where( (users.id % 2 == 0) )`  
+        `Where( (users.role == "admin").Not() )`  
+        `Where( (users.role == "admin") & (users.name != None) )`  
         """
         self._expression = expression
+        return self
+
+    #----------#
+    # GROUPING #
+    #----------#
+
+    _groups: tuple[list[Expression | AliasedColumn], list[Expression | AliasedColumn]]
+
+    def GroupBy (self, *expression: Expression | AliasedColumn) -> Self:
+        """Apply `GROUP BY {expression, ...}`"""
+        self._groups[0].extend(expression)
+        return self
+
+    def Having (self, *expression: Expression | AliasedColumn) -> Self:
+        """Apply `HAVING {expression, ...}`"""
+        self._groups[1].extend(expression)
         return self
 
     #---------#
@@ -190,11 +200,11 @@ class Select:
 
     _orders: list[Orderable]
 
-    def OrderBy (self, *o: Orderable) -> Self:
-        """Apply `ORDER BY {o}`
+    def OrderBy (self, *order: Orderable) -> Self:
+        """Apply `ORDER BY {order, ...}`
 
-        ## Example
-        ```python
+        ### Example
+        ```
         Select(T.users.All())
         .From(T.users)
         .OrderBy(
@@ -204,7 +214,7 @@ class Select:
         )
         ```
         """
-        self._orders.extend(o)
+        self._orders.extend(order)
         return self
 
     #------#

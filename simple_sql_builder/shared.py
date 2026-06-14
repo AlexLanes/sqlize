@@ -28,6 +28,7 @@ class AliasedColumn (Protocol):
     """Inteface for a `Column` or `Expression` with alias `AS`"""
 
     alias: str
+    """Quoted `alias`"""
 
     def to_sql (self) -> str:
         """`SQL: {Column|Expression} AS {alias}`"""
