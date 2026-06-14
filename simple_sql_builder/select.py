@@ -96,10 +96,10 @@ class Orderable:
 class Union (Pageable, Orderable):
 
     all: bool
-    left: Select
+    left: Select | Union
     right: Select
 
-    def __init__ (self, _all: bool, left: Select, right: Select) -> None:
+    def __init__ (self, _all: bool, left: Select | Union, right: Select) -> None:
         self.all = _all
         self.left = left
         self.right = right
@@ -135,6 +135,14 @@ class Union (Pageable, Orderable):
             )
             if part
         )
+
+    def Union (self, select: Select) -> Union:
+        """Apply `(self) UNION ({select})`"""
+        return Union(False, self, select)
+
+    def UnionAll (self, select: Select) -> Union:
+        """Apply `(self) UNION ALL ({select})`"""
+        return Union(True, self, select)
 
 class Select (Pageable, Orderable):
     """Builder of `Select` statement
