@@ -193,6 +193,35 @@ class Expression:
         """Apply `(Expression) DESC` for `Select.Orderby`"""
         return Orderable("DESC", self)
 
+    #-----------#
+    # Constants #
+    #-----------#
+
+    @property
+    def CURRENT_DATE (self) -> Expression:
+        """Constant `CURRENT_DATE`"""
+        return ConstantExpression("CURRENT_DATE")
+
+    @property
+    def CURRENT_TIME (self) -> Expression:
+        """Constant `CURRENT_TIME`"""
+        return ConstantExpression("CURRENT_TIME")
+
+    @property
+    def CURRENT_TIMESTAMP (self) -> Expression:
+        """Constant `CURRENT_TIMESTAMP`"""
+        return ConstantExpression("CURRENT_TIMESTAMP")
+
+    @property
+    def LOCAL_TIME (self) -> Expression:
+        """Constant `LOCALTIME`"""
+        return ConstantExpression("LOCALTIME")
+
+    @property
+    def LOCAL_TIMESTAMP (self) -> Expression:
+        """Constant `LOCALTIMESTAMP`"""
+        return ConstantExpression("LOCALTIMESTAMP")
+
     #---------------#
     # AliasedColumn #
     #---------------#
@@ -251,6 +280,13 @@ class Expression:
         """Apply `self {char} v...)`
         - Use `.As(alias)` to Select as a Column"""
         return ConcatExpression(char, self, *v)
+
+class ConstantExpression (Expression):
+    def __init__ (self, name: str) -> None:
+        self.name = name
+
+    def to_sql (self) -> str:
+        return self.name
 
 class ConcatExpression (Expression):
     def __init__ (self, char: str, *args: ExpOrValue) -> None:
@@ -358,6 +394,7 @@ type EmptyExpression = Expression
 E: EmptyExpression = Expression()
 """`Expression` to build a `Expression` from a empty state
 - `E.Case()`
-- `E.Concat('->', ' ', '<-')`"""
+- `E.Concat("(", column, ")")`
+- `E.CURRENT_TIMESTAMP`"""
 
 __all__ = ["Expression", "E"]
