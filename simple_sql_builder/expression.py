@@ -300,6 +300,60 @@ class Expression:
         - Use `.As(alias)` to Select as a Column"""
         return ConcatExpression(char, self, *v)
 
+    #-------------------#
+    # Numeric Functions #
+    #-------------------#
+
+    def Abs (self) -> Expression:
+        """Apply `ABS(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("ABS", self)
+
+    def Ceil (self) -> Expression:
+        """Apply `CEIL(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("CEIL", self)
+
+    def Floor (self) -> Expression:
+        """Apply `FLOOR(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("FLOOR", self)
+
+    def Round (self, n: int | Expression) -> Expression:
+        """Apply `ROUND(Expression, {n})`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("ROUND", self, n)
+
+    #-----------------#
+    # Group Functions #
+    #-----------------#
+
+    def Count (self) -> Expression:
+        """Apply `COUNT(Expression)`
+        - `T.column.All().Count()` to `COUNT(*)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("COUNT", self)
+
+    def Min (self) -> Expression:
+        """Apply `MIN(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("MIN", self)
+
+    def Max (self) -> Expression:
+        """Apply `MAX(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("MAX", self)
+
+    def Sum (self) -> Expression:
+        """Apply `SUM(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("SUM", self)
+
+    def Avg (self) -> Expression:
+        """Apply `AVG(Expression)`
+        - Use `.As(alias)` to Select as a Column"""
+        return NamedFunctionExpression("AVG", self)
+
 class ConstantExpression (Expression):
     def __init__ (self, name: str) -> None:
         self.name = name
