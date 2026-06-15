@@ -2,6 +2,7 @@
 from __future__ import annotations
 import itertools, string
 from typing import Generator
+from dataclasses import dataclass
 # internal
 from simple_sql_builder.column import Column
 
@@ -19,42 +20,41 @@ table_alias_generator = gen()
 TABLE_CACHE = dict[str | None, dict[str, "Table"]]()
 """`{ schema: { table_name: Table }}`"""
 
+@dataclass
+class TableData:
+    name: str
+    alias: str
+    schema: str | None
+
 class Table:
 
-    __name: str
-    __table_alias: str
-    __schema: str | None
+    _td_: TableData
 
     def __init__ (self, name: str, schema: str | None) -> None:
-        if name.startswith("__"):
-            raise ValueError(f"Table({name}) should not start with '__'")
-
-        self.__name = name
-        self.__schema = schema
-        self.__table_alias = next(table_alias_generator)
-
+        self._td_ = TableData(name, next(table_alias_generator), schema)
         if schema not in TABLE_CACHE:
             TABLE_CACHE[schema] = {}
         TABLE_CACHE[schema][name] = self
 
     def __repr__ (self) -> str:
-        return f"<Table {self.to_sql()}>"
+        return f"<Table {self.to_table_sql()}>"
 
-    def to_sql (self) -> str:
+    def to_table_sql (self) -> str:
         """`SQL: [schema.]table alias` version"""
-        sql = f"{self.__name} {self.__table_alias}"
-        return f"{self.__schema}.{sql}" if self.__schema else sql
+        schema = self._td_.schema
+        sql = f"{self._td_.name} {self._td_.alias}"
+        return f"{schema}.{sql}" if schema else sql
 
     def Schema (self, schema: str) -> Table:
         """Apply `schema.table`"""
-        if (s := TABLE_CACHE.get(schema)) and (t := s.get(self.__name)):
+        if (s := TABLE_CACHE.get(schema)) and (t := s.get(self._td_.name)):
             return t
 
         if schema not in TABLE_CACHE:
             TABLE_CACHE[schema] = {}
-        TABLE_CACHE[schema][self.__name] = self
+        TABLE_CACHE[schema][self._td_.name] = self
 
-        self.__schema = schema
+        self._td_.schema = schema
         return self
 
     #--------#
@@ -66,12 +66,12 @@ class Table:
 
     def All (self) -> Column:
         """Create column `*` for `table`"""
-        return Column("*", self.__table_alias)
+        return Column("*", self._td_.alias)
 
     def Column (self, name: str) -> Column:
         """Create column `name` for `table`
         - Same as `table.column_name`"""
-        return Column(name, self.__table_alias)
+        return Column(name, self._td_.alias)
 
 class TableBuilder:
     def __call__ (self, table_name: str, schema: str | None) -> Table:

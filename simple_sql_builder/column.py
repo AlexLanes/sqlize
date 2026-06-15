@@ -114,7 +114,7 @@ class AliasedColumnBuilder:
 
 A = AliasedColumnBuilder()
 """Creator of `AliasedColumn`  
-Can be used on `Where` `GroupBy` `OrderBy` to reference a `Column(name).As(alias)`
+Can be used on `Select` `Where` `GroupBy` `OrderBy` to reference a `Column(name).As(alias)`
 
 `A.All()`  
 `A.custom_name`  
