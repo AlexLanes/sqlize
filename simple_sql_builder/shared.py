@@ -1,5 +1,14 @@
 # std
-from typing import Self, Literal, Protocol
+from typing import (
+    Any, Self,
+    Literal, Protocol,
+    Sequence, Iterable, Mapping
+)
+
+type SequenceAny = Sequence[Any]
+type MappingAny = Mapping[str, Any]
+type ManyMappingAny = Iterable[MappingAny]
+type ManySequenceAny = Iterable[SequenceAny]
 
 def quote (s: str) -> str:
     """Quote `s` if contains space"""
@@ -38,4 +47,9 @@ __all__ = [
     "quote",
     "AliasedColumn",
     "OrderableExpression",
+
+    "MappingAny",
+    "SequenceAny",
+    "ManyMappingAny",
+    "ManySequenceAny",
 ]
