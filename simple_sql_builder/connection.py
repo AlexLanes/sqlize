@@ -28,15 +28,15 @@ class IConnectionPEP249 (Protocol):
 @dataclass
 class ResultSQL:
 
-    affected: int
+    rowcount: int
     columns: tuple[str, ...]
     rows: tuple[SequenceAny, ...]
 
     def __bool__ (self) -> bool:
-        return bool(self.affected or self.returned)
+        return bool(self.rowcount or self.returned)
 
     def __repr__ (self) -> str:
-        return f"<ResultSQL affected={self.affected} returned={self.returned}>"
+        return f"<ResultSQL rowcount={self.rowcount} returned={self.returned}>"
 
     @property
     def returned (self) -> int:
@@ -98,11 +98,11 @@ class Cursor:
         )
 
         columns = self.columns
-        affected = self.rowcount
+        rowcount = self.rowcount
         rows = tuple(row for row in self.cursor) if columns else tuple()
 
         self.close()
-        return ResultSQL(affected, columns, rows)
+        return ResultSQL(rowcount, columns, rows)
 
     def executemany (self, sql: str, params: ManySequenceAny) -> ResultSQL:
         self.cursor = (
@@ -111,11 +111,11 @@ class Cursor:
         )
 
         columns = self.columns
-        affected = self.rowcount
+        rowcount = self.rowcount
         rows = tuple(row for row in self.cursor) if columns else tuple()
 
         self.close()
-        return ResultSQL(affected, columns, rows)
+        return ResultSQL(rowcount, columns, rows)
 
 class Connection:
     """`IConnectionPEP249 => "DB API 2.0"` Wrapper to `transaction` `close` `Cursor`
