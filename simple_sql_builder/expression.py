@@ -12,7 +12,7 @@ from simple_sql_builder.shared import (
     AliasedColumn as _AliasedColumn
 )
 
-type ExpOrValue = Expression | Any
+type ExpOrValue = Expression  | Any
 type ExpOrString = Expression | str
 
 NOT_SET = object()
@@ -93,15 +93,20 @@ class Expression:
     def to_sql (self) -> str:
         raise NotImplementedError
 
-    @classmethod
-    def Value (cls, value: Any) -> Expression:
+    #---------------#
+    # AliasedColumn #
+    #---------------#
+
+    def Value (self, value: Any) -> LiteralExpression:
         """Create a `Expression` from a Literal `value`"""
         if isinstance(value, Expression):
             raise TypeError(f"Expression.Value(value) should be a Literal Value not a Expression")
+        return LiteralExpression(value)
 
-        e = cls()
-        e.to_sql = lambda *_: to_sql_str(value)
-        return e
+    def As (self, alias: str) -> _AliasedColumn:
+        """Apply `(Expression) AS {alias}` to `Select()` as a Column
+        - `Select( (T.orders.quantity * T.orders.value).As("Total") )`"""
+        return AliasedColumn(self, alias)
 
     #--------------------#
     # Logical Expression #
@@ -251,15 +256,6 @@ class Expression:
         """Constant `LOCALTIMESTAMP`"""
         return ConstantExpression("LOCALTIMESTAMP")
 
-    #---------------#
-    # AliasedColumn #
-    #---------------#
-
-    def As (self, alias: str) -> _AliasedColumn:
-        """Apply `(Expression) AS {alias}` to `Select()` as a Column
-        - `Select( (T.orders.quantity * T.orders.value).As("Total") )`"""
-        return AliasedColumn(self, alias)
-
     #-----------#
     # Functions #
     #-----------#
@@ -363,6 +359,13 @@ class Expression:
         """Apply `AVG(Expression)`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("AVG", self)
+
+class LiteralExpression (Expression):
+    def __init__ (self, value: Any) -> None:
+        self.value = value
+
+    def to_sql (self) -> str:
+        return to_sql_str(self.value)
 
 class ConstantExpression (Expression):
     def __init__ (self, name: str) -> None:
@@ -506,4 +509,4 @@ E: EmptyExpression = Expression()
 `LOCAL_TIME` `LOCAL_TIMESTAMP`
 """
 
-__all__ = ["Expression", "E"]
+__all__ = ["Expression", "E", "LiteralExpression", "to_sql_str"]

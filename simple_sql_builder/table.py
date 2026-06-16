@@ -39,11 +39,15 @@ class Table:
     def __repr__ (self) -> str:
         return f"<Table {self.to_table_sql()}>"
 
+    def to_table_name (self) -> str:
+        """`SQL: [schema.]table` version"""
+        name = self._td_.name
+        schema = self._td_.schema
+        return f"{schema}.{name}" if schema else name
+
     def to_table_sql (self) -> str:
         """`SQL: [schema.]table alias` version"""
-        schema = self._td_.schema
-        sql = f"{self._td_.name} {self._td_.alias}"
-        return f"{schema}.{sql}" if schema else sql
+        return f"{self.to_table_name()} {self._td_.alias}"
 
     def Schema (self, schema: str) -> Table:
         """Apply `schema.table`"""
