@@ -1,5 +1,6 @@
-from typing import Protocol, Literal
+from typing import Protocol, Literal, runtime_checkable
 
+@runtime_checkable
 class IPositionalParameter (Protocol):
     identifier: str
     def next (self) -> str:

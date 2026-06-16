@@ -77,7 +77,7 @@ class Cursor:
 
     @property
     def rowcount (self) -> int:
-        try: return max(self.rowcount or 0, 0)
+        try: return max(self.cursor.rowcount or 0, 0)
         except Exception: return 0
 
     @property
@@ -99,36 +99,48 @@ class Cursor:
 
         columns = self.columns
         affected = self.rowcount
-        rows = tuple(row for row in self.cursor)
-        self.close()
+        rows = tuple(row for row in self.cursor) if columns else tuple()
 
+        self.close()
         return ResultSQL(affected, columns, rows)
 
-    def executemany (self, sql: str, params: SequenceAny | None = None) -> ResultSQL:
+    def executemany (self, sql: str, params: ManySequenceAny) -> ResultSQL:
         self.cursor = (
-            self.cursor.executemany(sql)
-            if params is None else
             self.cursor.executemany(sql, params)
-        ) or self.cursor
+            or self.cursor
+        )
 
         columns = self.columns
         affected = self.rowcount
-        rows = tuple(row for row in self.cursor)
-        self.close()
+        rows = tuple(row for row in self.cursor) if columns else tuple()
 
+        self.close()
         return ResultSQL(affected, columns, rows)
 
 class Connection:
-    """`IConnectionPEP249 => "DB API 2.0"` Wrapper to `transaction` `close` `Cursor`"""
+    """`IConnectionPEP249 => "DB API 2.0"` Wrapper to `transaction` `close` `Cursor`
+    - `Connection(conn)` closing should be handled
+    - `with Connection(conn) as connection` are closed after `with`"""
     def __init__ (self, conn: IConnectionPEP249) -> None:
         self.conn = conn
 
     def __repr__ (self) -> str:
-        name = f"{self.conn.__module__}.{self.conn.__class__.__name__}"
-        return f"<Connection for {name!r}>"
+        name = (
+            f"for {conn.__module__}.{conn.__class__.__name__}"
+            if (conn := getattr(self, "conn", False))
+            else "closed"
+        )
+        return f"<Connection {name!r}>"
+
+    def __enter__ (self) -> Self:
+        return self
+
+    def __exit__ (self, *_) -> None:
+        self.close()
 
     def close (self) -> None:
         self.conn.close()
+        del self.conn
 
     def commit (self) -> None:
         self.conn.commit()
@@ -140,6 +152,6 @@ class Connection:
         return Cursor(self.conn.cursor())
 
 __all__ = [
+    "ResultSQL",
     "Connection",
-    "IConnectionPEP249"
 ]
