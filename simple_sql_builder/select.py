@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Self, Literal, override
 # internal
 from simple_sql_builder.shared     import AliasedColumn, OrderableExpression
+from simple_sql_builder.connection import Connection, ResultSQL
 from simple_sql_builder.expression import Expression
 from simple_sql_builder.column     import Column
 from simple_sql_builder.table      import Table
@@ -18,6 +19,16 @@ class Pageable:
         self._paging = []
         super().__init__()
 
+    def Limit (self, value: int | None) -> Self:
+        """Apply `LIMIT {value}`
+        - `None` do nothing"""
+        if value is None:
+            return self
+        if value <= 0:
+            raise ValueError(f"Select.Limit({value}) should be >= 1")
+        self._paging.append((1, "LIMIT {value}", value))
+        return self
+
     def Offset (self, value: int | None) -> Self:
         """Apply `OFFSET {value}`
         - `None` do nothing"""
@@ -25,7 +36,7 @@ class Pageable:
             return self
         if value < 0:
             raise ValueError(f"Select.Offset({value}) should be >= 0")
-        self._paging.append((1, "OFFSET {value}", value))
+        self._paging.append((2, "OFFSET {value}", value))
         return self
 
     def OffsetRows (self, value: int | None) -> Self:
@@ -35,17 +46,7 @@ class Pageable:
             return self
         if value < 0:
             raise ValueError(f"Select.OffsetRows({value}) should be >= 0")
-        self._paging.append((1, "OFFSET {value} ROWS", value))
-        return self
-
-    def Limit (self, value: int | None) -> Self:
-        """Apply `LIMIT {value}`
-        - `None` do nothing"""
-        if value is None:
-            return self
-        if value <= 0:
-            raise ValueError(f"Select.Limit({value}) should be >= 1")
-        self._paging.append((2, "LIMIT {value}", value))
+        self._paging.append((2, "OFFSET {value} ROWS", value))
         return self
 
     def FetchNextRowsOnly (self, value: int | None) -> Self:
@@ -107,6 +108,14 @@ class Queryable (Pageable, Orderable, CteCollector):
     def to_raw_sql (self) -> str:
         """Complete `SQL: SELECT` version"""
         return self.as_sql
+
+    def execute (self, connection: Connection) -> ResultSQL:
+        """Execute `Select` Statement for `Connection`"""
+        return (
+            connection
+            .cursor()
+            .execute(self.to_raw_sql()) # TODO
+        )
 
 class CteTable (Table, CteCollector):
 
