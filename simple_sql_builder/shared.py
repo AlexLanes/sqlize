@@ -2,13 +2,13 @@
 from typing import (
     Any, Self,
     Literal, Protocol,
-    Sequence, Iterable, Mapping
+    Sequence, Mapping,
 )
 
 type SequenceAny = Sequence[Any]
 type MappingAny = Mapping[str, Any]
-type ManyMappingAny = Iterable[MappingAny]
-type ManySequenceAny = Iterable[SequenceAny]
+type ManyMappingAny = Sequence[MappingAny]
+type ManySequenceAny = Sequence[SequenceAny]
 
 def quote (s: str) -> str:
     """Quote `s` if contains space"""
