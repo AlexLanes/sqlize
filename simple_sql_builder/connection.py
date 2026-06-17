@@ -30,7 +30,7 @@ class ResultSQL:
 
     rowcount: int
     columns: tuple[str, ...]
-    rows: tuple[SequenceAny, ...]
+    rows: list[SequenceAny]
 
     def __bool__ (self) -> bool:
         return bool(self.rowcount or self.returned)
@@ -56,10 +56,12 @@ class ResultSQL:
     def stringify (self, indent: int = 4) -> str:
         def defaults (item: Any) -> Any:
             match item:
+                case datetime(): return item.isoformat(sep="T", timespec="seconds")
+                case time(): return item.isoformat(timespec="seconds")
+                case date(): return item.isoformat()
                 case Decimal(): return float(item)
-                case date() | time() | datetime(): return item.isoformat()
                 case 1 if hasattr(item, "__iter__"):
-                    return [x for x in item]
+                    return [defaults(x) for x in item]
                 case 1 if hasattr(item, "__dict__"):
                     return item.__dict__
                 case _: return str(item)
@@ -90,29 +92,35 @@ class Cursor:
         try: self.cursor.close()
         except Exception: pass
 
-    def execute (self, sql: str, params: SequenceAny | None = None) -> ResultSQL:
+    def execute (self, sql: str, params: SequenceAny | None = None, **kwargs) -> ResultSQL:
         self.cursor = (
-            self.cursor.execute(sql)
+            self.cursor.execute(sql, **kwargs)
             if params is None else
-            self.cursor.execute(sql, params)
+            self.cursor.execute(sql, params, **kwargs)
         )
 
         columns = self.columns
         rowcount = self.rowcount
-        rows = tuple(row for row in self.cursor) if columns else tuple()
+        rows = [row for row in self.cursor] if columns else []
 
         self.close()
         return ResultSQL(rowcount, columns, rows)
 
-    def executemany (self, sql: str, params: ManySequenceAny) -> ResultSQL:
+    def executemany (self, sql: str, params: ManySequenceAny, **kwargs) -> ResultSQL:
         self.cursor = (
-            self.cursor.executemany(sql, params)
+            self.cursor.executemany(sql, params, **kwargs)
             or self.cursor
         )
 
         columns = self.columns
         rowcount = self.rowcount
-        rows = tuple(row for row in self.cursor) if columns else tuple()
+        rows = [row for row in self.cursor] if columns else []
+
+        # cursor.nextset()
+        if (nextset := getattr(self.cursor, "nextset", None)) and callable(nextset):
+            while nextset():
+                rowcount += self.rowcount
+                rows.extend(row for row in self.cursor)
 
         self.close()
         return ResultSQL(rowcount, columns, rows)
