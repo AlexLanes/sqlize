@@ -109,12 +109,13 @@ class Queryable (Pageable, Orderable, CteCollector):
         """Complete `SQL: SELECT` version"""
         return self.as_sql
 
-    def execute (self, connection: Connection) -> ResultSQL:
-        """Execute `Select` Statement for `Connection`"""
+    def execute (self, connection: Connection, **kwargs) -> ResultSQL:
+        """Execute `Select` Statement for `Connection`
+        - `kwargs` additional params `execute()` accepts"""
         return (
             connection
             .cursor()
-            .execute(self.to_raw_sql()) # TODO
+            .execute(self.to_raw_sql(), None, **kwargs) # TODO
         )
 
 class CteTable (Table, CteCollector):
