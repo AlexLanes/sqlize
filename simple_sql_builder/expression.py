@@ -509,4 +509,4 @@ E: EmptyExpression = Expression()
 `LOCAL_TIME` `LOCAL_TIMESTAMP`
 """
 
-__all__ = ["Expression", "E", "LiteralExpression", "to_sql_str"]
+__all__ = ["Expression", "E", "to_sql_str"]
