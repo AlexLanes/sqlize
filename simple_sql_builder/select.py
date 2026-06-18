@@ -210,9 +210,9 @@ class Union (Queryable):
         return CteTable(name, self)
 
 class Select (Queryable):
-    """Builder of `Select` statement
+    """Builder of `Select` Statement
 
-    # Example
+    ## Example
     ```python
     from simple_sql_builder import T, Select
 
