@@ -95,7 +95,7 @@ class Cursor:
     def execute (self, sql: str, params: SequenceAny | None = None, **kwargs) -> ResultSQL:
         self.cursor = (
             self.cursor.execute(sql, **kwargs)
-            if params is None else
+            if params else
             self.cursor.execute(sql, params, **kwargs)
         )
 
