@@ -7,7 +7,7 @@ from simple_sql_builder.shared import (
     OrderableExpression,
     AliasedColumn as _AliasedColumn
 )
-from simple_sql_builder.expression import Expression, LiteralExpression
+from simple_sql_builder.expression import Expression, LiteralExpression, ConstantExpression
 
 class Orderable (OrderableExpression):
     def __init__(self, order: Literal["ASC", "DESC"], column: Column | AliasedColumn) -> None:
@@ -72,15 +72,17 @@ class AliasedColumn (_AliasedColumn, Expression):
         return Orderable("DESC", self)
 
 class ColumnWithValue (LiteralExpression):
-
-    column: Column
-
     def __init__ (self, value: Any, column: Column) -> None:
         super().__init__(value)
         self.column = column
 
     def __repr__(self) -> str:
         return f"<ColumnWithValue {self.column.name}={self.value}>"
+
+class ColumnWithDefaultValue (ConstantExpression):
+    def __init__ (self, name: str, column: Column) -> None:
+        super().__init__(name)
+        self.column = column
 
 class Column (Expression):
     def __init__ (self, name: str, table_alias: str) -> None:
@@ -97,14 +99,18 @@ class Column (Expression):
         """`SQL: table_alias.name` version"""
         return f"{self.ta}.{quote(self.name)}"
 
+    def As (self, alias: str) -> AliasedColumn:
+        """Apply `able_alias.name AS alias`"""
+        return AliasedColumn(self, alias)
+
     @override
     def Value (self, value: Any) -> ColumnWithValue:
         """Create a `Value` for the `Column`"""
         return ColumnWithValue(value, self)
 
-    def As (self, alias: str) -> AliasedColumn:
-        """Apply `able_alias.name AS alias`"""
-        return AliasedColumn(self, alias)
+    @property
+    def DEFAULT_VALUE (self) -> ColumnWithDefaultValue:
+        return ColumnWithDefaultValue("DEFAULT", self)
 
     #-----------#
     # Orderable #
@@ -140,4 +146,4 @@ Can be used on `Select` `Where` `GroupBy` `OrderBy` to reference a `Column(name)
 `A("custom name")`
 """
 
-__all__ = ["Column", "A", "ColumnWithValue"]
+__all__ = ["Column", "A"]

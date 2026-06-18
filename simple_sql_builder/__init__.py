@@ -6,5 +6,5 @@ from simple_sql_builder.table      import T # Table + Column Builder
 from simple_sql_builder.connection import Connection
 
 # DMLs
-from simple_sql_builder.insert import Insert
+from simple_sql_builder.insert import InsertMany, InsertOne
 from simple_sql_builder.select import Select
