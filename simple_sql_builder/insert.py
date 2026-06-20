@@ -5,10 +5,9 @@ from typing import Self, override
 from .shared import quote, ManySequenceAny, SequenceAny
 from .connection import Connection, ResultSQL
 from .expression import to_sql_str
-from .column import Column, ColumnWithValue, ColumnWithDefaultValue
+from .column import ColumnWithValue, ColumnWithDefaultValue
 from .table import Table
-from .parameters import *
-from .supports import SupportsReturning, SupportsExecute
+from .supports import SupportsReturning, SupportsExecute, SupportsParams
 
 class InsertDefaultValues (SupportsExecute, SupportsReturning):
     def __init__ (self, into: Table) -> None:
@@ -28,7 +27,7 @@ class InsertDefaultValues (SupportsExecute, SupportsReturning):
             if line
         )
 
-class InsertOne (SupportsExecute, SupportsReturning):
+class InsertOne (SupportsExecute, SupportsReturning, SupportsParams):
     """Builder of `Insert` Statement
 
     ## Example
@@ -54,17 +53,10 @@ class InsertOne (SupportsExecute, SupportsReturning):
     ```
     """
 
-    def __init__ (self, into: Table, positional: DefaultsPositional | type[IPositionalParameter] = "?") -> None:
+    def __init__ (self, into: Table) -> None:
         super().__init__()
         self.into = into
         self.data_values = tuple[ColumnWithValue | ColumnWithDefaultValue]()
-
-        match positional:
-            case IPositionalParameter():
-                self.positional = positional
-            case str() if positional in POSITIONAL_PARAMETERS:
-                self.positional = POSITIONAL_PARAMETERS[positional]
-            case _: raise ValueError(f"Unexpected Positional for InsertOne(): {positional!r}")
 
     def __repr__ (self) -> str:
         return f"<INSERT INTO {self.into.to_table_name()!r} 1 ROW>"
@@ -75,7 +67,7 @@ class InsertOne (SupportsExecute, SupportsReturning):
         if not self.data_values:
             raise ValueError("InsertOne.Values() should be called first")
 
-        positional = self.positional()
+        positional = self.positional_parameter()
         columns = ", ".join(quote(c.column.name) for c in self.data_values)
         parameters = ", ".join(
             positional.next()
@@ -158,7 +150,7 @@ class InsertOne (SupportsExecute, SupportsReturning):
         """Apply `DEFAULT VALUES`"""
         return InsertDefaultValues(self.into)
 
-class InsertMany (SupportsExecute, SupportsReturning):
+class InsertMany (SupportsExecute, SupportsReturning, SupportsParams):
     """Builder of `Insert` Statement with multiple values
 
     ## Example
@@ -174,17 +166,10 @@ class InsertMany (SupportsExecute, SupportsReturning):
     ```
     """
 
-    def __init__ (self, into: Table, *, positional: DefaultsPositional | type[IPositionalParameter] = "?") -> None:
+    def __init__ (self, into: Table) -> None:
         super().__init__()
         self.into = into
         self.data_values = list[list[ColumnWithValue]]()
-
-        match positional:
-            case IPositionalParameter():
-                self.positional = positional
-            case str() if positional in POSITIONAL_PARAMETERS:
-                self.positional = POSITIONAL_PARAMETERS[positional]
-            case _: raise ValueError(f"Unexpected Positional for InsertMany(): {positional!r}")
 
     def __repr__ (self) -> str:
         return f"<INSERT INTO {self.into.to_table_name()!r} {len(self.data_values)} ROW(S)>"
@@ -195,14 +180,9 @@ class InsertMany (SupportsExecute, SupportsReturning):
         if not self.data_values:
             raise ValueError("InsertMany.Values() should be called first")
 
-        positional = self.positional()
+        positional = self.positional_parameter()
         columns = ", ".join(quote(v.column.name) for v in self.data_values[0])
-        parameters = ", ".join(
-            positional.next()
-            if isinstance(column, ColumnWithValue)
-            else column.to_sql()
-            for column in self.data_values[0]
-        )
+        parameters = ", ".join(positional.next() for _ in self.data_values[0])
 
         return "\n".join(
             line

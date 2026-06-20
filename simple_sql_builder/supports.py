@@ -1,14 +1,12 @@
 # std
 from typing import Self
 # internal
+from simple_sql_builder.parameters import *
 from simple_sql_builder.expression import Expression
 from simple_sql_builder.connection import Connection, ResultSQL
 from simple_sql_builder.column import Column, AliasedColumn
 
 class SupportsExecute:
-    def __init__ (self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-    
     def to_raw_sql (self) -> str:
         """Raw `SQL: Statement` version"""
         raise NotImplementedError
@@ -72,8 +70,30 @@ class SupportsReturning:
         self.data_returning = list(value)
         return self
 
+class SupportsParams:
+
+    positional_parameter = POSITIONAL_PARAMETERS["?"]
+    """Parameter builder for Positional
+    - `Default: ?`"""
+
+    def set_parameters (self, *, positional: DefaultsPositional | type[IPositionalParameter] | None = None) -> Self:
+        """Change parameters
+        - `Default` for `PositionalParameter ?`"""
+        match positional:
+            case None: pass
+            case IPositionalParameter():
+                self.positional_parameter = positional
+            case str() if positional in POSITIONAL_PARAMETERS:
+                self.positional_parameter = POSITIONAL_PARAMETERS[positional]
+            case _:
+                name = self.__class__.__name__
+                raise ValueError(f"Unexpected Positional Parameter for {name}().set_parameter({positional!r})")
+
+        return self
+
 __all__ = [
     "SupportsWhere",
+    "SupportsParams",
     "SupportsExecute",
     "SupportsReturning",
 ]
