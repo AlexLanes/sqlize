@@ -7,21 +7,13 @@ from simple_sql_builder.parameters import *
 from simple_sql_builder.expression import Expression
 from simple_sql_builder.column import Column, AliasedColumn
 
-class SupportParameters (ABC):
-
-    def __init__ (self) -> None:
-        super().__init__()
-
-    @abstractmethod
-    def to_sql (self) -> tuple[str, SequenceAny | ManySequenceAny]:
-        """`SQL: Parameterized` as `(sql, params)`"""
-        ...
+class SupportParameter:
 
     parameter = POSITIONAL_PARAMETERS["?"]
     """Positional Parameter
     - `Default: ?`"""
 
-    def set_parameter (self, positional: DefaultsPositional) -> Self:
+    def set_parameter (self, positional: Positionals) -> Self:
         """Change `PositionalParameter`
         - `Default: ?`"""
         if p := POSITIONAL_PARAMETERS.get(positional):
@@ -30,6 +22,15 @@ class SupportParameters (ABC):
 
         name = self.__class__.__name__
         raise ValueError(f"Unexpected Positional Parameter for {name}().set_parameter({positional!r})")
+
+class StatementWithParameter (ABC, SupportParameter):
+    def __init__ (self) -> None:
+        super().__init__()
+
+    @abstractmethod
+    def to_sql (self) -> tuple[str, SequenceAny | ManySequenceAny]:
+        """`SQL: Parameterized` as `(sql, params)`"""
+        ...
 
 class SupportsWhere:
 
@@ -87,6 +88,7 @@ class SupportsReturning:
 
 __all__ = [
     "SupportsWhere",
+    "SupportParameter",
     "SupportsReturning",
-    "SupportParameters",
+    "StatementWithParameter",
 ]

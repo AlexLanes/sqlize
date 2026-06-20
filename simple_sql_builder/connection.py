@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Protocol, Any, Self
 from datetime import datetime, date, time
 # internal
+from simple_sql_builder.parameters import *
 from simple_sql_builder.shared import SequenceAny, ManySequenceAny, MappingAny
+from simple_sql_builder.supports import StatementWithParameter, SupportParameter
 
 class ICursorPEP249 (Protocol):
     def __iter__ (self) -> Self: ...
@@ -125,12 +127,14 @@ class Cursor:
         self.close()
         return ResultSQL(rowcount, columns, rows)
 
-class Connection:
+class Connection (SupportParameter):
     """`IConnectionPEP249 => "DB API 2.0"` Wrapper to `transaction` `close` `Cursor`
     - `Connection(conn)` closing should be handled
     - `with Connection(conn) as connection` are closed after `with`"""
+
     def __init__ (self, conn: IConnectionPEP249) -> None:
         self.conn = conn
+        self.set_parameter(guess_driver_parameter(conn))
 
     def __repr__ (self) -> str:
         name = (
@@ -158,6 +162,19 @@ class Connection:
 
     def cursor (self) -> Cursor:
         return Cursor(self.conn.cursor())
+
+    def execute (self, statement: StatementWithParameter, **kwargs) -> ResultSQL:
+        """Execute `Statement`
+        - Type of `PositionalParameter` guessed on `init` by `conn` name
+            - `set_parameter()` to manually set
+        - `kwargs` additional params `execute()` or `executemany()` accepts"""
+        statement.parameter = self.parameter
+        sql, params = statement.to_sql()
+
+        cursor = self.cursor()
+        if params and isinstance(params[0], (list, tuple)):
+            return cursor.executemany(sql, params, **kwargs)
+        return cursor.execute(sql, params, **kwargs)
 
 __all__ = [
     "ResultSQL",

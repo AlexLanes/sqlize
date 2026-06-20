@@ -5,9 +5,9 @@ from typing import Self, override
 from .shared import quote, ManySequenceAny, SequenceAny
 from .column import ColumnWithValue, ColumnWithDefaultValue
 from .table import Table
-from .supports import SupportsReturning, SupportParameters
+from .supports import SupportsReturning, StatementWithParameter
 
-class InsertDefaultValues (SupportParameters, SupportsReturning):
+class InsertDefaultValues (StatementWithParameter, SupportsReturning):
     def __init__ (self, into: Table) -> None:
         super().__init__()
         self.into = into
@@ -24,7 +24,7 @@ class InsertDefaultValues (SupportParameters, SupportsReturning):
             if line
         ), []
 
-class InsertOne (SupportParameters, SupportsReturning):
+class InsertOne (StatementWithParameter, SupportsReturning):
     """Builder of `Insert` Statement
 
     ## Example
@@ -112,7 +112,7 @@ class InsertOne (SupportParameters, SupportsReturning):
         """Apply `DEFAULT VALUES`"""
         return InsertDefaultValues(self.into)
 
-class InsertMany (SupportParameters, SupportsReturning):
+class InsertMany (StatementWithParameter, SupportsReturning):
     """Builder of `Insert` Statement with multiple values
 
     ## Example
