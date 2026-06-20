@@ -2,103 +2,17 @@
 from __future__ import annotations
 from typing import Self, Literal, override
 # internal
-from simple_sql_builder.shared     import AliasedColumn, OrderableExpression
-from simple_sql_builder.connection import Connection, ResultSQL
+from simple_sql_builder.shared     import AliasedColumn
 from simple_sql_builder.expression import Expression
 from simple_sql_builder.column     import Column
 from simple_sql_builder.table      import Table
-
-type JOINS = Literal["INNER", "LEFT", "RIGHT", "FULL"]
-
-class Pageable:
-
-    _paging: list[tuple[int, str, int]]
-    """`[(order weight, "SQL {value}", value)]`"""
-
-    def __init__ (self) -> None:
-        self._paging = []
-        super().__init__()
-
-    def Limit (self, value: int | None) -> Self:
-        """Apply `LIMIT {value}`
-        - `None` do nothing"""
-        if value is None:
-            return self
-        if value <= 0:
-            raise ValueError(f"Select.Limit({value}) should be >= 1")
-        self._paging.append((1, "LIMIT {value}", value))
-        return self
-
-    def Offset (self, value: int | None) -> Self:
-        """Apply `OFFSET {value}`
-        - `None` do nothing"""
-        if value is None:
-            return self
-        if value < 0:
-            raise ValueError(f"Select.Offset({value}) should be >= 0")
-        self._paging.append((2, "OFFSET {value}", value))
-        return self
-
-    def OffsetRows (self, value: int | None) -> Self:
-        """Apply `OFFSET {value} ROWS`
-        - `None` do nothing"""
-        if value is None:
-            return self
-        if value < 0:
-            raise ValueError(f"Select.OffsetRows({value}) should be >= 0")
-        self._paging.append((2, "OFFSET {value} ROWS", value))
-        return self
-
-    def FetchNextRowsOnly (self, value: int | None) -> Self:
-        """Apply `FETCH NEXT {value} ROWS ONLY`
-        - `None` do nothing"""
-        if value is None:
-            return self
-        if value <= 0:
-            raise ValueError(f"Select.FetchNextRowsOnly({value}) should be >= 1")
-        self._paging.append((3, "FETCH NEXT {value} ROWS ONLY", value))
-        return self
-
-    def FetchFirstRowsOnly (self, value: int | None) -> Self:
-        """Apply `FETCH FRIST {value} ROWS ONLY`
-        - `None` do nothing"""
-        if value is None:
-            return self
-        if value <= 0:
-            raise ValueError(f"Select.FetchFirstRowsOnly({value}) should be >= 1")
-        self._paging.append((3, "FETCH FRIST {value} ROWS ONLY", value))
-        return self
-
-class Orderable:
-
-    _orders: list[OrderableExpression]
-
-    def __init__ (self) -> None:
-        self._orders = []
-        super().__init__()
-
-    def OrderBy (self, *order: OrderableExpression) -> Self:
-        """Apply `ORDER BY {order, ...}`
-
-        ### Example
-        ```
-        Select(T.users.All())
-        .From(T.users)
-        .OrderBy(
-            T.users.id.ASC,
-            T.users.name.DESC.NullsFirst,
-            (T.users.id % 2).DESC
-        )
-        ```
-        """
-        self._orders.extend(order)
-        return self
+from simple_sql_builder.supports   import *
 
 class CteCollector:
     def collect_ctes (self) -> list[CteTable]:
         return []
 
-class Queryable (Pageable, Orderable, CteCollector):
+class Queryable (SupportsPaging, SupportsOrderBy, CteCollector):
 
     @property
     def as_sql (self) -> str:
@@ -108,15 +22,6 @@ class Queryable (Pageable, Orderable, CteCollector):
     def to_raw_sql (self) -> str:
         """Complete `SQL: SELECT` version"""
         return self.as_sql
-
-    def execute (self, connection: Connection, **kwargs) -> ResultSQL:
-        """Execute `Select` Statement for `Connection`
-        - `kwargs` additional params `execute()` accepts"""
-        return (
-            connection
-            .cursor()
-            .execute(self.to_raw_sql(), None, **kwargs) # TODO
-        )
 
 class CteTable (Table, CteCollector):
 
@@ -159,35 +64,29 @@ class Union (Queryable):
     right: Select
 
     def __init__ (self, _all: bool, left: Queryable, right: Select) -> None:
+        super().__init__()
         self.all = _all
         self.left = left
         self.right = right
-        super().__init__()
 
     def __repr__ (self) -> str:
-        return f"<Union {"ALL" if self.all else ""}>"
+        return f"<UNION {"ALL" if self.all else ""}>"
 
     @property
     @override
     def as_sql (self) -> str:
         union_name = "UNION ALL" if self.all else "UNION"
-        orderby = ", ".join(o.to_sql() for o in self._orders)
-        paging_gen = (
-            sql.format(value=value)
-            for _, sql, value in sorted(self._paging)
-        )
-
         return "\n".join(
             part
             for part in (
                 self.left.to_raw_sql(),
                 union_name,
                 self.right.to_raw_sql(),
-                " ",
-                f"ORDER BY {orderby}" if orderby else None,
-                *paging_gen
+                "",
+                self.data_orderby_sql,
+                self.data_paging_sql
             )
-            if part
+            if part is not None
         ).rstrip()
 
     @override
@@ -209,7 +108,7 @@ class Union (Queryable):
         """Transform `Union` into a `CTE` that works as a `Table`"""
         return CteTable(name, self)
 
-class Select (Queryable):
+class Select (Queryable, SupportsWhere):
     """Builder of `Select` Statement
 
     ## Example
@@ -244,64 +143,45 @@ class Select (Queryable):
 
     distinct: bool
     table: Table | CteTable | None
-    columns: list[Column | AliasedColumn]
+    data_columns: list[Column | AliasedColumn]
 
     def __init__ (self, *columns: Column | AliasedColumn) -> None:
-        """`Columns` to Select
-
-        ### Example
-        ```python
-        Select(
-            T.users.id,
-            T.users.name,
-            T.orders.id.As("order_id"),
-            (T.orders.quantity * T.orders.value).As("total_value")
-        )
-        ```
-        """
+        super().__init__()
         if not columns:
             raise ValueError("No columns informed on Select(). Consider using Select(T.table.All())")
 
         self.table = None
         self.distinct = False
-        self.columns = list(columns)
-
-        self._joins = []
-        self._expression = None
-        self._groups = ([], [])
-        super().__init__()
+        self.data_columns = list(columns)
+        self.data_joins = []
+        self.data_groups = ([], [])
 
     def __repr__ (self) -> str:
         d = " DISTINCT " if self.distinct else " "
         return (
-            f"<Select{d}FROM {self.table.to_table_sql()}>"
+            f"<SELECT{d}FROM {self.table.to_table_sql()}>"
             if self.table else 
-            f"<Select{d}empty>"
+            f"<SELECT{d}empty>"
         )
 
     @property
     @override
     def as_sql (self) -> str:
         if self.table is None:
-            raise ValueError("Table not set on Select.From(Table)")
+            raise ValueError("Table not set on Select().From(Table)")
 
         select  = "SELECT DISTINCT" if self.distinct else "SELECT"
-        columns = ", ".join(c.to_sql() for c in self.columns)
-        orderby = ", ".join(o.to_sql() for o in self._orders)
+        columns = ", ".join(c.to_sql() for c in self.data_columns)
         joins_gen = (
             f"{name} JOIN {table.to_table_sql()} ON {exp.to_sql()}"
-            for name, table, exp in self._joins
-        )
-        paging_gen = (
-            sql.format(value=value)
-            for _, sql, value in sorted(self._paging)
+            for name, table, exp in self.data_joins
         )
         groupby, having = (
             ", ".join(
                 exp.to_sql() if isinstance(exp, Expression) else exp.alias
                 for exp in item
             )
-            for item in self._groups
+            for item in self.data_groups
         )
         return "\n".join(
             line
@@ -309,11 +189,11 @@ class Select (Queryable):
                 f"{select} {columns}",
                 f"FROM {self.table.to_table_sql()}",
                 *joins_gen,
-                f"WHERE {self._expression.to_sql()}" if self._expression is not None else "",
+                self.data_where_sql,
                 f"GROUP BY {groupby}" if groupby else "",
                 f"HAVING {having}"    if having  else "",
-                f"ORDER BY {orderby}" if orderby else "",
-                *paging_gen,
+                self.data_orderby_sql,
+                self.data_paging_sql,
             )
             if line and not line.isspace()
         )
@@ -321,10 +201,10 @@ class Select (Queryable):
     @override
     def to_raw_sql (self) -> str:
         if self.table is None:
-            raise ValueError("Table not set on Select.From(Table)")
+            raise ValueError("Table not set on Select().From(Table)")
 
         ctes = [cte
-                for table in (self.table, *(t for _, t, _ in self._joins))
+                for table in (self.table, *(t for _, t, _ in self.data_joins))
                     if isinstance(table, CteTable)
                 for cte in table.collect_ctes()]
         if not ctes:
@@ -338,7 +218,7 @@ class Select (Queryable):
             ))
             for cte in ctes
         )
-        return f"""WITH {cte_sql}\n{self.as_sql}"""
+        return f"WITH {cte_sql}\n{self.as_sql}"
 
     @override
     def collect_ctes (self) -> list[CteTable]:
@@ -361,19 +241,21 @@ class Select (Queryable):
     def AsCte (self, name: str) -> CteTable:
         """Transform `Select` into a `CTE` that works as a `Table`"""
         if self.table is None:
-            raise ValueError("Table not set on Select.From(Table)")
+            raise ValueError("Table not set on Select().From(Table)")
         return CteTable(name, self)
 
     #-------#
     # JOINS #
     #-------#
 
-    _joins: list[tuple[JOINS, Table | CteTable, Expression]]
+    data_joins: list[tuple[
+        Literal["INNER", "LEFT", "RIGHT", "FULL"], Table | CteTable, Expression
+    ]]
 
     def Join (self, table: Table | CteTable, on: Expression) -> Self:
         """Apply `INNER JOIN {table} ON {on}`
         - `Join(T.orders, T.orders.user_id == T.users.id)`"""
-        self._joins.append(
+        self.data_joins.append(
             ("INNER", table, on)
         )
         return self
@@ -381,7 +263,7 @@ class Select (Queryable):
     def LeftJoin (self, table: Table | CteTable, on: Expression) -> Self:
         """Apply `LEFT JOIN {table} ON {on}`
         - `LeftJoin(T.orders, T.orders.user_id == T.users.id)`"""
-        self._joins.append(
+        self.data_joins.append(
             ("LEFT", table, on)
         )
         return self
@@ -389,7 +271,7 @@ class Select (Queryable):
     def RightJoin (self, table: Table | CteTable, on: Expression) -> Self:
         """Apply `RIGHT JOIN {table} ON {on}`
         - `RightJoin(T.orders, T.orders.user_id == T.users.id)`"""
-        self._joins.append(
+        self.data_joins.append(
             ("RIGHT", table, on)
         )
         return self
@@ -397,47 +279,25 @@ class Select (Queryable):
     def FullJoin (self, table: Table | CteTable, on: Expression) -> Self:
         """Apply `FULL JOIN {table} ON {on}`
         - `FullJoin(T.orders, T.orders.user_id == T.users.id)`"""
-        self._joins.append(
+        self.data_joins.append(
             ("FULL", table, on)
         )
-        return self
-
-    #-------#
-    # WHERE #
-    #-------#
-
-    _expression: Expression | None
-
-    def Where (self, expression: Expression) -> Self:
-        """Apply `WHERE {expression}`
-        #### A `Column` is a `Expression`
-        #### See `E` docstring for more info
-        <br>
-
-        ### Examples
-        `users = T.users`  
-        `Where(users.id == 1)`  
-        `Where( (users.id % 2 == 0) )`  
-        `Where( (users.role == "admin").Not() )`  
-        `Where( (users.role == "admin") & (users.name != None) )`  
-        """
-        self._expression = expression
         return self
 
     #----------#
     # GROUPING #
     #----------#
 
-    _groups: tuple[list[Expression | AliasedColumn], list[Expression | AliasedColumn]]
+    data_groups: tuple[list[Expression | AliasedColumn], list[Expression | AliasedColumn]]
 
     def GroupBy (self, *expression: Expression | AliasedColumn) -> Self:
         """Apply `GROUP BY {expression, ...}`"""
-        self._groups[0].extend(expression)
+        self.data_groups[0].extend(expression)
         return self
 
     def Having (self, *expression: Expression | AliasedColumn) -> Self:
         """Apply `HAVING {expression, ...}`"""
-        self._groups[1].extend(expression)
+        self.data_groups[1].extend(expression)
         return self
 
     #--------#

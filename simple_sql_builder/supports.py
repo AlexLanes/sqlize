@@ -40,6 +40,16 @@ class SupportsWhere:
         super().__init__(*args, **kwargs)
         self.data_where = None
 
+    @property
+    def data_where_sql (self) -> str | None:
+        """`SQL` version of `WHERE`
+        - `None` if empty"""
+        return (
+            f"WHERE {self.data_where.to_sql()}"
+            if self.data_where is not None
+            else None
+        )
+
     def Where (self, expression: Expression) -> Self:
         """Apply `WHERE {expression}`
         #### A `Column` is a `Expression`
@@ -56,13 +66,116 @@ class SupportsWhere:
         self.data_where = expression
         return self
 
+class SupportsOrderBy:
+
+    data_orderby: list[OrderableExpression]
+
+    def __init__ (self) -> None:
+        super().__init__()
+        self.data_orderby = []
+
+    @property
+    def data_orderby_sql (self) -> str | None:
+        """`SQL` version of `ORDER BY`
+        - `None` if empty"""
+        if self.data_orderby:
+            return None
+        return "ORDER BY" + ", ".join(o.to_sql() for o in self.data_orderby)
+
+    def OrderBy (self, *order: OrderableExpression) -> Self:
+        """Apply `ORDER BY {order, ...}`
+
+        ### Example
+        ```
+        Select(T.users.All())
+        .From(T.users)
+        .OrderBy(
+            T.users.id.ASC,
+            T.users.name.DESC.NullsFirst,
+            (T.users.id % 2).DESC
+        )
+        ```
+        """
+        self.data_orderby.extend(order)
+        return self
+
+class SupportsPaging:
+
+    data_paging: list[tuple[int, str, int]]
+    """`[(order weight, "SQL {value}", value)]`"""
+
+    def __init__ (self) -> None:
+        super().__init__()
+        self.data_paging = []
+
+    @property
+    def data_paging_sql (self) -> str | None:
+        """`SQL` version of `LIMITS` and `OFFSETS` joined by `\\n`
+        - `None` if empty"""
+        if not self.data_paging:
+            return
+        return "\n".join(
+            sql.format(value=value)
+            for _, sql, value in sorted(self.data_paging, key = lambda x: x[0])
+        )
+
+    def Limit (self, value: int | None) -> Self:
+        """Apply `LIMIT {value}`
+        - `None` do nothing"""
+        if value is None:
+            return self
+        if value <= 0:
+            raise ValueError(f"{self.__class__.__name__}().Limit({value}) should be >= 1")
+        self.data_paging.append((1, "LIMIT {value}", value))
+        return self
+
+    def Offset (self, value: int | None) -> Self:
+        """Apply `OFFSET {value}`
+        - `None` do nothing"""
+        if value is None:
+            return self
+        if value < 0:
+            raise ValueError(f"{self.__class__.__name__}().Offset({value}) should be >= 0")
+        self.data_paging.append((2, "OFFSET {value}", value))
+        return self
+
+    def OffsetRows (self, value: int | None) -> Self:
+        """Apply `OFFSET {value} ROWS`
+        - `None` do nothing"""
+        if value is None:
+            return self
+        if value < 0:
+            raise ValueError(f"{self.__class__.__name__}().OffsetRows({value}) should be >= 0")
+        self.data_paging.append((2, "OFFSET {value} ROWS", value))
+        return self
+
+    def FetchNextRowsOnly (self, value: int | None) -> Self:
+        """Apply `FETCH NEXT {value} ROWS ONLY`
+        - `None` do nothing"""
+        if value is None:
+            return self
+        if value <= 0:
+            raise ValueError(f"{self.__class__.__name__}().FetchNextRowsOnly({value}) should be >= 1")
+        self.data_paging.append((3, "FETCH NEXT {value} ROWS ONLY", value))
+        return self
+
+    def FetchFirstRowsOnly (self, value: int | None) -> Self:
+        """Apply `FETCH FRIST {value} ROWS ONLY`
+        - `None` do nothing"""
+        if value is None:
+            return self
+        if value <= 0:
+            raise ValueError(f"{self.__class__.__name__}().FetchFirstRowsOnly({value}) should be >= 1")
+        self.data_paging.append((3, "FETCH FRIST {value} ROWS ONLY", value))
+        return self
+
 class SupportsReturning:
 
     data_returning: list[Column | AliasedColumn]
 
     def __init__ (self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.data_returning = list[Column | AliasedColumn]()
+        self.data_returning = []
 
     @property
     def data_returning_sql (self) -> str | None:
@@ -83,11 +196,13 @@ class SupportsReturning:
         """Apply `RETURNING {Columns}`  
         `.Returning(A.All())`  
         `.Returning(T.users.id, A.name)`"""
-        self.data_returning = list(value)
+        self.data_returning.extend(value)
         return self
 
 __all__ = [
     "SupportsWhere",
+    "SupportsPaging",
+    "SupportsOrderBy",
     "SupportParameter",
     "SupportsReturning",
     "StatementWithParameter",
