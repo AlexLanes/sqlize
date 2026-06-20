@@ -12,6 +12,9 @@ class InsertDefaultValues (StatementWithParameter, SupportsReturning):
         super().__init__()
         self.into = into
 
+    def __repr__ (self) -> str:
+        return f"<INSERT INTO {self.into.to_table_name()!r} DEFAULT VALUES>"
+
     @override
     def to_sql (self) -> tuple[str, SequenceAny]:
         return "\n".join(
