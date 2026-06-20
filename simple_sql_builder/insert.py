@@ -18,17 +18,12 @@ class InsertDefaultValues (SupportsExecute, SupportsReturning):
     @override
     def to_raw_sql (self) -> str:
         """Raw `SQL: INSERT INTO {table} DEFAULT VALUES [RETURNING {columns}]` version"""
-        returning = ", ".join(
-            column.name if isinstance(column, Column) else column.alias
-            for column in self.data_returning
-        )
-
         return "\n".join(
             line
             for line in (
                 f"INSERT INTO {self.into.to_table_name()}",
                 "DEFAULT VALUES",
-                f"RETURNING {returning}" if returning else None
+                self.data_returning_sql
             )
             if line
         )
@@ -88,10 +83,6 @@ class InsertOne (SupportsExecute, SupportsReturning):
             else column.to_sql()
             for column in self.data_values
         )
-        returning = ", ".join(
-            column.name if isinstance(column, Column) else column.alias
-            for column in self.data_returning
-        )
 
         return "\n".join(
             line
@@ -99,7 +90,7 @@ class InsertOne (SupportsExecute, SupportsReturning):
                 f"INSERT INTO {self.into.to_table_name()}",
                 f"({ columns })",
                 f"VALUES ({ parameters })",
-                f"RETURNING {returning}" if returning else None
+                self.data_returning_sql
             )
             if line
         )
@@ -129,17 +120,13 @@ class InsertOne (SupportsExecute, SupportsReturning):
             else column.to_sql()
             for column in self.data_values
         )
-        returning = ", ".join(
-            column.name if isinstance(column, Column) else column.alias
-            for column in self.data_returning
-        )
 
         return "\n".join(
             line
             for line in (
                 f"INSERT INTO { self.into.to_table_name() }\n({ columns })",
                 f"VALUES ({values})",
-                f"RETURNING {returning}" if returning else None
+                self.data_returning_sql
             )
             if line
         )
@@ -216,10 +203,6 @@ class InsertMany (SupportsExecute, SupportsReturning):
             else column.to_sql()
             for column in self.data_values[0]
         )
-        returning = ", ".join(
-            column.name if isinstance(column, Column) else column.alias
-            for column in self.data_returning
-        )
 
         return "\n".join(
             line
@@ -227,7 +210,7 @@ class InsertMany (SupportsExecute, SupportsReturning):
                 f"INSERT INTO {self.into.to_table_name()}",
                 f"({ columns })",
                 f"VALUES ({ parameters })",
-                f"RETURNING {returning}" if returning else None
+                self.data_returning_sql
             )
             if line
         )
@@ -255,10 +238,6 @@ class InsertMany (SupportsExecute, SupportsReturning):
             f"""({ ", ".join(to_sql_str(column.value) for column in columns) }){ "" if columns is last else "," }"""
             for columns in self.data_values
         )
-        returning = ", ".join(
-            column.name if isinstance(column, Column) else column.alias
-            for column in self.data_returning
-        )
 
         return "\n".join(
             line
@@ -266,7 +245,7 @@ class InsertMany (SupportsExecute, SupportsReturning):
                 f"INSERT INTO { self.into.to_table_name() }\n({ columns })",
                 "VALUES",
                 *values_gen,
-                f"RETURNING {returning}" if returning else None
+                self.data_returning_sql
             )
             if line
         )
