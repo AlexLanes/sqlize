@@ -1,28 +1,43 @@
 # std
 from typing import Self
+from abc import ABC, abstractmethod
 # internal
+from simple_sql_builder.shared import *
 from simple_sql_builder.parameters import *
 from simple_sql_builder.expression import Expression
-from simple_sql_builder.connection import Connection, ResultSQL
 from simple_sql_builder.column import Column, AliasedColumn
 
-class SupportsExecute:
-    def to_raw_sql (self) -> str:
-        """Raw `SQL: Statement` version"""
-        raise NotImplementedError
+class SupportParameters (ABC):
 
-    def execute (self, connection: Connection, **kwargs) -> ResultSQL:
-        """Execute Statement for `Connection`
-        - `kwargs` additional params `execute()` or `executemany()` accepts"""
-        return connection.cursor().execute(self.to_raw_sql(), **kwargs)
+    def __init__ (self) -> None:
+        super().__init__()
+
+    @abstractmethod
+    def to_sql (self) -> tuple[str, SequenceAny | ManySequenceAny]:
+        """`SQL: Parameterized` as `(sql, params)`"""
+        ...
+
+    parameter = POSITIONAL_PARAMETERS["?"]
+    """Positional Parameter
+    - `Default: ?`"""
+
+    def set_parameter (self, positional: DefaultsPositional) -> Self:
+        """Change `PositionalParameter`
+        - `Default: ?`"""
+        if p := POSITIONAL_PARAMETERS.get(positional):
+            self.parameter = p
+            return self
+
+        name = self.__class__.__name__
+        raise ValueError(f"Unexpected Positional Parameter for {name}().set_parameter({positional!r})")
 
 class SupportsWhere:
 
-    data_expression: Expression | None
+    data_where: Expression | None
 
     def __init__ (self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.data_expression = None
+        self.data_where = None
 
     def Where (self, expression: Expression) -> Self:
         """Apply `WHERE {expression}`
@@ -37,7 +52,7 @@ class SupportsWhere:
         `Where( (users.role == "admin").Not() )`  
         `Where( (users.role == "admin") & (users.name != None) )`  
         """
-        self.data_expression = expression
+        self.data_where = expression
         return self
 
 class SupportsReturning:
@@ -70,30 +85,8 @@ class SupportsReturning:
         self.data_returning = list(value)
         return self
 
-class SupportsParams:
-
-    positional_parameter = POSITIONAL_PARAMETERS["?"]
-    """Parameter builder for Positional
-    - `Default: ?`"""
-
-    def set_parameters (self, *, positional: DefaultsPositional | type[IPositionalParameter] | None = None) -> Self:
-        """Change parameters
-        - `Default` for `PositionalParameter ?`"""
-        match positional:
-            case None: pass
-            case IPositionalParameter():
-                self.positional_parameter = positional
-            case str() if positional in POSITIONAL_PARAMETERS:
-                self.positional_parameter = POSITIONAL_PARAMETERS[positional]
-            case _:
-                name = self.__class__.__name__
-                raise ValueError(f"Unexpected Positional Parameter for {name}().set_parameter({positional!r})")
-
-        return self
-
 __all__ = [
     "SupportsWhere",
-    "SupportsParams",
-    "SupportsExecute",
     "SupportsReturning",
+    "SupportParameters",
 ]

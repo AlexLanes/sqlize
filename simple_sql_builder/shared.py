@@ -7,7 +7,6 @@ from typing import (
 
 type SequenceAny = Sequence[Any]
 type MappingAny = Mapping[str, Any]
-type ManyMappingAny = Sequence[MappingAny]
 type ManySequenceAny = Sequence[SequenceAny]
 
 def quote (s: str) -> str:
@@ -50,6 +49,5 @@ __all__ = [
 
     "MappingAny",
     "SequenceAny",
-    "ManyMappingAny",
     "ManySequenceAny",
 ]

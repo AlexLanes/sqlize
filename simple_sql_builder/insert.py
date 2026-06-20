@@ -3,20 +3,17 @@ from __future__ import annotations
 from typing import Self, override
 # internal
 from .shared import quote, ManySequenceAny, SequenceAny
-from .connection import Connection, ResultSQL
-from .expression import to_sql_str
 from .column import ColumnWithValue, ColumnWithDefaultValue
 from .table import Table
-from .supports import SupportsReturning, SupportsExecute, SupportsParams
+from .supports import SupportsReturning, SupportParameters
 
-class InsertDefaultValues (SupportsExecute, SupportsReturning):
+class InsertDefaultValues (SupportParameters, SupportsReturning):
     def __init__ (self, into: Table) -> None:
         super().__init__()
         self.into = into
 
     @override
-    def to_raw_sql (self) -> str:
-        """Raw `SQL: INSERT INTO {table} DEFAULT VALUES [RETURNING {columns}]` version"""
+    def to_sql (self) -> tuple[str, SequenceAny]:
         return "\n".join(
             line
             for line in (
@@ -25,9 +22,9 @@ class InsertDefaultValues (SupportsExecute, SupportsReturning):
                 self.data_returning_sql
             )
             if line
-        )
+        ), []
 
-class InsertOne (SupportsExecute, SupportsReturning, SupportsParams):
+class InsertOne (SupportParameters, SupportsReturning):
     """Builder of `Insert` Statement
 
     ## Example
@@ -42,14 +39,14 @@ class InsertOne (SupportsExecute, SupportsReturning, SupportsParams):
         )
         .Returning(actor.All())
     )
-    sql, params = insert.to_positional_sql()
+    sql, params = insert.to_sql()
 
     insert = (
         InsertOne(into=actor)
         .DefaultValues()
         .Returning(actor.All())
     )
-    sql = insert.to_raw_sql()
+    sql, _ = insert.to_sql()
     ```
     """
 
@@ -67,7 +64,7 @@ class InsertOne (SupportsExecute, SupportsReturning, SupportsParams):
         if not self.data_values:
             raise ValueError("InsertOne.Values() should be called first")
 
-        positional = self.positional_parameter()
+        positional = self.parameter()
         columns = ", ".join(quote(c.column.name) for c in self.data_values)
         parameters = ", ".join(
             positional.next()
@@ -87,7 +84,8 @@ class InsertOne (SupportsExecute, SupportsReturning, SupportsParams):
             if line
         )
 
-    def to_positional_sql (self) -> tuple[str, SequenceAny]:
+    @override
+    def to_sql (self) -> tuple[str, SequenceAny]:
         """Positional Parameterized `(sql, (values, ...))`"""
         return (
             self.as_positional_sql,
@@ -96,42 +94,6 @@ class InsertOne (SupportsExecute, SupportsReturning, SupportsParams):
                 for column in self.data_values
                 if isinstance(column, ColumnWithValue)
             )
-        )
-
-    @override
-    def to_raw_sql (self) -> str:
-        """Raw `SQL: INSERT INTO {table} ({columns}) VALUES ({values}) [RETURNING {columns}]` version
-        - Consider using `to_positional_sql()`"""
-        if not self.data_values:
-            raise ValueError("InsertOne.Values() should be called first")
-
-        columns = ", ".join(quote(c.column.name) for c in self.data_values)
-        values = ", ".join(
-            to_sql_str(column.value)
-            if isinstance(column, ColumnWithValue)
-            else column.to_sql()
-            for column in self.data_values
-        )
-
-        return "\n".join(
-            line
-            for line in (
-                f"INSERT INTO { self.into.to_table_name() }\n({ columns })",
-                f"VALUES ({values})",
-                self.data_returning_sql
-            )
-            if line
-        )
-
-    @override
-    def execute (self, connection: Connection, **kwargs) -> ResultSQL:
-        """Execute `Insert` Statement for `Connection`
-        - `kwargs` additional params `execute()` accepts"""
-        sql, params = self.to_positional_sql()
-        return (
-            connection
-            .cursor()
-            .execute(sql, params, **kwargs)
         )
 
     def Values (self, *values: ColumnWithValue | ColumnWithDefaultValue) -> Self:
@@ -150,7 +112,7 @@ class InsertOne (SupportsExecute, SupportsReturning, SupportsParams):
         """Apply `DEFAULT VALUES`"""
         return InsertDefaultValues(self.into)
 
-class InsertMany (SupportsExecute, SupportsReturning, SupportsParams):
+class InsertMany (SupportParameters, SupportsReturning):
     """Builder of `Insert` Statement with multiple values
 
     ## Example
@@ -162,7 +124,7 @@ class InsertMany (SupportsExecute, SupportsReturning, SupportsParams):
         .Values(actor.last_name.Value("Foo"), actor.first_name.Value("Bar"))
         .Returning(actor.All())
     )
-    sql, params = insert.to_positional_sql()
+    sql, params = insert.to_sql()
     ```
     """
 
@@ -180,7 +142,7 @@ class InsertMany (SupportsExecute, SupportsReturning, SupportsParams):
         if not self.data_values:
             raise ValueError("InsertMany.Values() should be called first")
 
-        positional = self.positional_parameter()
+        positional = self.parameter()
         columns = ", ".join(quote(v.column.name) for v in self.data_values[0])
         parameters = ", ".join(positional.next() for _ in self.data_values[0])
 
@@ -195,7 +157,8 @@ class InsertMany (SupportsExecute, SupportsReturning, SupportsParams):
             if line
         )
 
-    def to_positional_sql (self) -> tuple[str, ManySequenceAny]:
+    @override
+    def to_sql (self) -> tuple[str, ManySequenceAny]:
         """Positional Parameterized `(sql, [(values), ...])`"""
         return (
             self.as_positional_sql,
@@ -203,42 +166,6 @@ class InsertMany (SupportsExecute, SupportsReturning, SupportsParams):
                 tuple(c.value for c in columns)
                 for columns in self.data_values
             ]
-        )
-
-    @override
-    def to_raw_sql (self) -> str:
-        """Raw `SQL: INSERT INTO {table} ({columns}) VALUES ({values}) [RETURNING {columns}]` version
-        - Consider using `to_positional_sql()`"""
-        if not self.data_values:
-            raise ValueError("InsertMany.Values() should be called first")
-
-        last = self.data_values[-1]
-        columns = ", ".join(quote(v.column.name) for v in self.data_values[0])
-        values_gen = (
-            f"""({ ", ".join(to_sql_str(column.value) for column in columns) }){ "" if columns is last else "," }"""
-            for columns in self.data_values
-        )
-
-        return "\n".join(
-            line
-            for line in (
-                f"INSERT INTO { self.into.to_table_name() }\n({ columns })",
-                "VALUES",
-                *values_gen,
-                self.data_returning_sql
-            )
-            if line
-        )
-
-    @override
-    def execute (self, connection: Connection, **kwargs) -> ResultSQL:
-        """Execute `Insert` Statement for `Connection`
-        - `kwargs` additional params `executemany()` accepts"""
-        sql, params = self.to_positional_sql()
-        return (
-            connection
-            .cursor()
-            .executemany(sql, params, **kwargs)
         )
 
     def Values (self, *value: ColumnWithValue) -> Self:
