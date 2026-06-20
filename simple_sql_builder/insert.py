@@ -8,6 +8,9 @@ from .table import Table
 from .supports import SupportsReturning, StatementWithParameter
 
 class InsertDefaultValues (StatementWithParameter, SupportsReturning):
+
+    into: Table
+
     def __init__ (self, into: Table) -> None:
         super().__init__()
         self.into = into
@@ -53,10 +56,13 @@ class InsertOne (StatementWithParameter, SupportsReturning):
     ```
     """
 
+    into: Table
+    data_values: list[ColumnWithValue | ColumnWithDefaultValue]
+
     def __init__ (self, into: Table) -> None:
         super().__init__()
         self.into = into
-        self.data_values = tuple[ColumnWithValue | ColumnWithDefaultValue]()
+        self.data_values = []
 
     def __repr__ (self) -> str:
         return f"<INSERT INTO {self.into.to_table_name()!r} 1 ROW>"
@@ -65,7 +71,7 @@ class InsertOne (StatementWithParameter, SupportsReturning):
     def as_positional_sql (self) -> str:
         """Positional Parameterized `SQL: INSERT INTO {table} ({columns}) VALUES ({values}) [RETURNING {columns}]` version"""
         if not self.data_values:
-            raise ValueError("InsertOne.Values() should be called first")
+            raise ValueError("InsertOne().Values() should be called first")
 
         positional = self.parameter()
         columns = ", ".join(quote(c.column.name) for c in self.data_values)
@@ -104,11 +110,11 @@ class InsertOne (StatementWithParameter, SupportsReturning):
         `.Values(T.users.id.Value(1), T.users.name.Value("Bar"))`  
         `.Values(T.users.name.Value("Foo"), T.users.id.DEFAULT_VALUE)`"""
         if not values:
-            raise ValueError("At least one value is required on InsertOne.Values()")
+            raise ValueError("At least one value is required on InsertOne().Values()")
         if self.data_values:
-            raise ValueError("InsertOne.Values() should be called once")
+            raise ValueError("InsertOne().Values() should be called once")
 
-        self.data_values = values
+        self.data_values.extend(values)
         return self
 
     def DefaultValues (self) -> InsertDefaultValues:
@@ -131,10 +137,13 @@ class InsertMany (StatementWithParameter, SupportsReturning):
     ```
     """
 
+    into: Table
+    data_values: list[list[ColumnWithValue]]
+
     def __init__ (self, into: Table) -> None:
         super().__init__()
         self.into = into
-        self.data_values = list[list[ColumnWithValue]]()
+        self.data_values = []
 
     def __repr__ (self) -> str:
         return f"<INSERT INTO {self.into.to_table_name()!r} {len(self.data_values)} ROW(S)>"
@@ -143,7 +152,7 @@ class InsertMany (StatementWithParameter, SupportsReturning):
     def as_positional_sql (self) -> str:
         """Positional Parameterized `SQL: INSERT INTO {table} ({columns}) VALUES ({values}) [RETURNING {columns}]` version"""
         if not self.data_values:
-            raise ValueError("InsertMany.Values() should be called first")
+            raise ValueError("InsertMany().Values() should be called first")
 
         positional = self.parameter()
         columns = ", ".join(quote(v.column.name) for v in self.data_values[0])
@@ -176,7 +185,7 @@ class InsertMany (StatementWithParameter, SupportsReturning):
         `.Values(T.users.id.Value(1), T.users.name.Value("Bar"))`  
         `.Values(T.users.name.Value("Foo"), T.users.id.Value(2))`"""
         if not value:
-            raise ValueError("At least one value is required on InsertMany.Values()")
+            raise ValueError("At least one value is required on InsertMany().Values()")
 
         ordered = sorted(value, key=lambda v: v.column.name)
         columns = [c.column.name for c in ordered]
@@ -185,14 +194,14 @@ class InsertMany (StatementWithParameter, SupportsReturning):
             case []:
                 if len(columns) != len(set(columns)):
                     raise ValueError(
-                        f"Duplicate names found on InsertMany.Values(): {columns}"
+                        f"Duplicate names found on InsertMany().Values(): {columns}"
                     )
 
             case [first, *_]:
                 expected = [v.column.name for v in first]
                 if expected != columns:
                     raise ValueError(
-                        "All InsertMany.Values() rows must have the same columns names;"
+                        "All InsertMany().Values() rows must have the same columns names;"
                         f" Columns {columns};"
                         f" Expected {expected}"
                     )
