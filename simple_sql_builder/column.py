@@ -83,8 +83,8 @@ class Column (Expression):
     name: str
 
     def __init__ (self, name: str, table_alias: str) -> None:
-        self.name = name
         self.ta = table_alias
+        self.name = quote(name)
 
     def __hash__ (self) -> int:
         return hash((self.name, self.ta))
@@ -92,11 +92,10 @@ class Column (Expression):
     @override
     def to_sql (self, *, table_alias=True):
         """`SQL: table_alias.name` version"""
-        name = quote(self.name)
         return DataSQL(
-            f"{self.ta}.{name}"
+            f"{self.ta}.{self.name}"
             if table_alias
-            else name,
+            else self.name,
             []
         )
 

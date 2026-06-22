@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Self, override
 # internal
-from .shared import quote, ManySequenceAny, SequenceAny
+from .shared import ManySequenceAny, SequenceAny
 from .expression import AliasedExpression, to_sql
 from .column import ColumnWithValue, ColumnWithDefaultValue
 from .table import Table
@@ -86,12 +86,12 @@ class InsertOne (ExecutableStatement, SupportsReturning):
             match value:
 
                 case ColumnWithValue():
-                    columns.append(quote(value.column.name))
+                    columns.append(value.column.name)
                     values.append(positional.next())
                     params.extend(value.values)
 
                 case ColumnWithDefaultValue():
-                    columns.append(quote(value.column.name))
+                    columns.append(value.column.name)
                     values.append(value.to_sql().join())
 
                 case AliasedExpression():
@@ -169,7 +169,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
         positional = self.parameter()
         parts = [
             f"INSERT INTO {self.into.to_table_name()}",
-            f"({ ", ".join(quote(v.column.name) for v in first) })",
+            f"({ ", ".join(v.column.name for v in first) })",
             f"VALUES ({ ", ".join(positional.next() for _ in first) })",
         ]
 
