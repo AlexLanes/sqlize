@@ -1,18 +1,14 @@
 # std
 from __future__ import annotations
-from datetime import datetime, date
+from abc import ABC, abstractmethod
 from typing import (
-    Any, Self,
+    Any, Self, override,
     Iterable, Literal, NoReturn
 )
 # internal
-from simple_sql_builder.shared import (
-    quote,
-    OrderableExpression,
-    AliasedColumn as _AliasedColumn
-)
+from simple_sql_builder.shared import quote, DataSQL
 
-type ExpOrValue = Expression  | Any
+type ExpOrValue  = Expression | Any
 type ExpOrString = Expression | str
 
 NOT_SET = object()
@@ -21,77 +17,110 @@ OPERATORS_FOR_PARENTESIS = {
     "/", "*"
 }
 
-def to_sql_str (value: object) -> str:
+def to_sql (value: object, *, table_alias=True) -> DataSQL:
     match value:
-        case Expression() | AliasedColumn(): return value.to_sql()
-
-        case None:  return "NULL"
-        case True:  return "TRUE"
-        case False: return "FALSE"
-        case str(): return repr(value)
-        case date():
-            return repr(value.isoformat())
-        case datetime():
-            return repr(value.isoformat(sep=" "))
+        case AbstractExpression():
+            return value.to_sql(table_alias=table_alias)
 
         case list() | tuple() | set():
-            values = ", ".join(map(to_sql_str, value))
-            return f"({values})"
+            all_params = []
+            sqls_parts = list[str]()
 
-        case _: return str(value)
+            for item in value:
+                sql = to_sql(item, table_alias=table_alias)
+                sqls_parts.append(str(sql))
+                all_params.extend(sql.params)
 
-class AliasedColumn (_AliasedColumn):
+            return DataSQL(f"({ ", ".join(sqls_parts) })", all_params)
+
+        case _: return DataSQL("{}", [value])
+
+class AbstractExpression (ABC):
+
+    values: tuple[Any, ...]
+
+    def __init__ (self, *values: Any) -> None:
+        self.values = tuple(
+            value
+            for value in values
+            if value is not E
+        )
+
+    def __repr__ (self) -> str:
+        sql = self.to_sql()
+        name = self.__class__.__name__
+        return f"<{name} => {sql.params} {sql}>"
+
+    @abstractmethod
+    def to_sql (self, *, table_alias=True) -> DataSQL:
+        """`SQL: Parameterized` as `(sql, params)`
+        - `table_alias` used to remove the table alias from columns
+        - Formatted as Python Positional Parameter `{}` to `self.values`"""
+        ...
+
+class AliasedExpression (AbstractExpression):
+    """`Expression` with alias `AS`"""
+
+    alias: str
+    """Quoted `alias`"""
+
     def __init__ (self, expression: Expression, alias: str) -> None:
+        super().__init__()
         self.alias = quote(alias)
         self.expression = expression
 
-    def __repr__ (self) -> str:
-        return f"<AliasedColumn => {self.to_sql()}>"
+    @override
+    def to_sql (self, *, table_alias=True):
+        """`SQL: ({ Expression }) AS {alias}`"""
+        sql = to_sql(self.expression, table_alias=table_alias)
+        return DataSQL(f"({ sql }) AS {self.alias}", sql.params)
 
-    def to_sql (self) -> str:
-        """`SQL: ({Expression}) AS {alias}`"""
-        return f"({self.expression.to_sql()}) AS {self.alias}"
+class OrderableExpression (AbstractExpression):
 
-class Orderable (OrderableExpression):
-    def __init__(self, order: Literal["ASC", "DESC"], expression: Expression | AliasedColumn) -> None:
+    order: Literal["ASC", "DESC"]
+    nulls: Literal["FIRST", "LAST"] | None = None
+    expression: AbstractExpression
+
+    def __init__(self, order: Literal["ASC", "DESC"], expression: AbstractExpression) -> None:
+        super().__init__()
         self.nulls = None
         self.order = order
         self.expression = expression
 
-    def __repr__ (self) -> str:
-        return f"<Orderable => {self.to_sql()}>"
-
     @property
-    def NullsFirst (self) -> Self:
+    def NULLS_FIRST (self) -> Self:
         self.nulls = "FIRST"
         return self
 
     @property
-    def NullsLast (self) -> Self:
+    def NULLS_LAST (self) -> Self:
         self.nulls = "LAST"
         return self
 
-    def to_sql (self) -> str:
-        """`SQL: ({Expression}) ASC|DESC [NULLS FIRST|LAST]` version"""
-        sql = f"({self.expression.to_sql()}) {self.order}"
-        return (
+    @override
+    def to_sql (self, *, table_alias=True):
+        """`SQL: ({ Expression }) ASC|DESC [NULLS FIRST|LAST]` version"""
+        sql = to_sql(self.expression, table_alias=table_alias)
+        params = sql.params
+
+        sql = f"({ sql }) {self.order}"
+        return DataSQL(
             f"{sql} NULLS {self.nulls}"
             if self.nulls is not None
-            else sql
+            else sql,
+
+            params
         )
 
-class Expression:
-    def __repr__ (self) -> str:
-        return f"<Expression => {self.to_sql()}>"
+class Expression (AbstractExpression):
+    def __init__ (self, *values: Any) -> None:
+        super().__init__(*values)
 
-    def __bool__(self) -> NoReturn:
+    def __bool__ (self) -> NoReturn:
         raise TypeError(
             "SQL expressions cannot be used as bool. "
             "Consider using .Not() for negation"
         )
-
-    def to_sql (self) -> str:
-        raise NotImplementedError
 
     #---------------#
     # AliasedColumn #
@@ -99,14 +128,17 @@ class Expression:
 
     def Value (self, value: Any) -> LiteralExpression:
         """Create a `Expression` from a Literal `value`"""
-        if isinstance(value, Expression):
-            raise TypeError(f"Expression.Value(value) should be a Literal Value not a Expression")
+        if isinstance(value, AbstractExpression):
+            raise TypeError(
+                "Column.Value(value) should be a Literal Value not an Expression. "
+                "Consider using (Expression).As(alias)"
+            )
         return LiteralExpression(value)
 
-    def As (self, alias: str) -> _AliasedColumn:
-        """Apply `(Expression) AS {alias}` to `Select()` as a Column
-        - `Select( (T.orders.quantity * T.orders.value).As("Total") )`"""
-        return AliasedColumn(self, alias)
+    def As (self, alias: str) -> AliasedExpression:
+        """Apply `({ Expression }) AS {alias}` to `Select()` as a Column
+        - `Select(( T.orders.quantity * T.orders.value ).As("Total"))`"""
+        return AliasedExpression(self, alias)
 
     #--------------------#
     # Logical Expression #
@@ -131,7 +163,7 @@ class Expression:
         return BinaryExpression(self, "AND", exp)
 
     def Not (self) -> Expression:
-        """Apply `NOT ({expression})`"""
+        """Apply `NOT ({ Expression })`"""
         return UnaryExpression("NOT", self)
 
     #-----------------------#
@@ -147,11 +179,11 @@ class Expression:
         return BinaryExpression(self, "-", other)
 
     def __mul__ (self, other: ExpOrValue) -> Expression:
-        """Apply `self * {other}`"""
+        """Apply `(self * {other})`"""
         return BinaryExpression(self, "*", other)
 
     def __truediv__ (self, other: ExpOrValue) -> Expression:
-        """Apply `self / {other}`"""
+        """Apply `(self / {other})`"""
         return BinaryExpression(self, "/", other)
 
     def __mod__ (self, other: ExpOrValue) -> Expression:
@@ -191,7 +223,7 @@ class Expression:
         return BinaryExpression(self, "<=", other)
 
     def In (self, values: Iterable[ExpOrValue]) -> Expression:
-        """Apply `self IN {(values)}`"""
+        """Apply `self IN ({ values })`"""
         return BinaryExpression(self, "IN", tuple(values))
 
     def Like (self, t: ExpOrString) -> Expression:
@@ -205,7 +237,7 @@ class Expression:
         return BinaryExpression(self, "ILIKE", t)
 
     def Between (self, low: ExpOrValue, high: ExpOrValue) -> Expression:
-        """Apply `self BETWEEN {low} AND {high}`
+        """Apply `(self BETWEEN {low} AND {high})`
         - Use `.As(alias)` to Select as a Column"""
         return BetweenExpression(self, low, high)
 
@@ -218,14 +250,14 @@ class Expression:
     #-----------#
 
     @property
-    def ASC (self) -> Orderable:
-        """Apply `(Expression) ASC` for `Select.Orderby`"""
-        return Orderable("ASC", self)
+    def ASC (self) -> OrderableExpression:
+        """Apply `({ Expression }) ASC` for `OrderBy`"""
+        return OrderableExpression("ASC", self)
 
     @property
-    def DESC (self) -> Orderable:
-        """Apply `(Expression) DESC` for `Select.Orderby`"""
-        return Orderable("DESC", self)
+    def DESC (self) -> OrderableExpression:
+        """Apply `({ Expression }) DESC` for `OrderBy`"""
+        return OrderableExpression("DESC", self)
 
     #-----------#
     # Constants #
@@ -261,48 +293,53 @@ class Expression:
     #-----------#
 
     def Upper (self) -> Expression:
-        """Apply `UPPER(Expression)`
+        """Apply `UPPER({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("UPPER", self)
 
     def Lower (self) -> Expression:
-        """Apply `LOWER(Expression)`
+        """Apply `LOWER({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("LOWER", self)
 
     def Length (self) -> Expression:
-        """Apply `LENGTH(Expression)`
+        """Apply `LENGTH({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("LENGTH", self)
 
     def Trim (self) -> Expression:
-        """Apply `TRIM(Expression)`
+        """Apply `TRIM({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("TRIM", self)
 
+    def Cast (self, as_type: str) -> Expression:
+        """Apply `CAST({Expression} AS {as_type})`
+        - Use `.As(alias)` to Select as a Column"""
+        return CastExpression(self, as_type)
+
     def Substring (self, start: int, length: int | None = None) -> Expression:
-        """Apply `SUBSTRING(Expression, start, [length])`
+        """Apply `SUBSTRING({ Expression }, start, [length])`
         - Use `.As(alias)` to Select as a Column"""
         args = (start,) if length is None else (start, length)
         return NamedFunctionExpression("SUBSTRING", self, *args)
 
     def Coalesce (self, default: ExpOrValue) -> Expression:
-        """Apply `COALESCE(Expression, default)`
+        """Apply `COALESCE({ Expression }, default)`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("COALESCE", self, default)
 
     def Replace (self, search: ExpOrString, replacement: ExpOrString) -> Expression:
-        """Apply `REPLACE(Expression, search, replacement)`
+        """Apply `REPLACE({ Expression }, search, replacement)`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("REPLACE", self, search, replacement)
 
     def Concat (self, *v: ExpOrValue) -> Expression:
-        """Apply `CONCAT(self, v...)`
+        """Apply `CONCAT({ Expression }, v...)`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("CONCAT", self, *v)
 
     def ConcatWithChar (self, *v: ExpOrValue, char: Literal["||", "+"] | str = "||") -> Expression:
-        """Apply `self {char} v...)`
+        """Apply `self {char} v...`
         - Use `.As(alias)` to Select as a Column"""
         return ConcatExpression(char, self, *v)
 
@@ -311,22 +348,22 @@ class Expression:
     #-------------------#
 
     def Abs (self) -> Expression:
-        """Apply `ABS(Expression)`
+        """Apply `ABS({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("ABS", self)
 
     def Ceil (self) -> Expression:
-        """Apply `CEIL(Expression)`
+        """Apply `CEIL({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("CEIL", self)
 
     def Floor (self) -> Expression:
-        """Apply `FLOOR(Expression)`
+        """Apply `FLOOR({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("FLOOR", self)
 
     def Round (self, n: int | Expression) -> Expression:
-        """Apply `ROUND(Expression, {n})`
+        """Apply `ROUND({ Expression }, n)`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("ROUND", self, n)
 
@@ -335,149 +372,215 @@ class Expression:
     #-----------------#
 
     def Count (self) -> Expression:
-        """Apply `COUNT(Expression)`
+        """Apply `COUNT({ Expression })`
         - `T.column.All().Count()` to `COUNT(*)`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("COUNT", self)
 
     def Min (self) -> Expression:
-        """Apply `MIN(Expression)`
+        """Apply `MIN({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("MIN", self)
 
     def Max (self) -> Expression:
-        """Apply `MAX(Expression)`
+        """Apply `MAX({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("MAX", self)
 
     def Sum (self) -> Expression:
-        """Apply `SUM(Expression)`
+        """Apply `SUM({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("SUM", self)
 
     def Avg (self) -> Expression:
-        """Apply `AVG(Expression)`
+        """Apply `AVG({ Expression })`
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("AVG", self)
 
 class LiteralExpression (Expression):
-    def __init__ (self, value: Any) -> None:
-        self.value = value
-
-    def to_sql (self) -> str:
-        return to_sql_str(self.value)
+    @override
+    def to_sql (self, *, table_alias=True):
+        return DataSQL("{}", self.values)
 
 class ConstantExpression (Expression):
-    def __init__ (self, name: str) -> None:
-        self.name = name
-
-    def to_sql (self) -> str:
-        return self.name
+    @override
+    def to_sql (self, *, table_alias=True):
+        return DataSQL(str(self.values[-1]), [])
 
 class ConcatExpression (Expression):
-    def __init__ (self, char: str, *args: ExpOrValue) -> None:
-        self.char = char
-        self.args = args
 
-    def to_sql (self) -> str:
-        return f" {self.char} ".join(
-            to_sql_str(arg)
-            for arg in self.args
-            if arg is not E
+    char: str
+
+    def __init__ (self, char: str, *values: ExpOrValue) -> None:
+        super().__init__(*values)
+        self.char = char
+
+    @override
+    def to_sql (self, *, table_alias=True):
+        sqls, params = [], []
+        generator = (to_sql(v, table_alias=table_alias) for v in self.values)
+
+        for sql in generator:
+            sqls.extend(sql.sqls)
+            params.extend(sql)
+
+        return DataSQL(
+            f" {self.char} ".join(sqls),
+            params
         )
 
 class CaseExpression (Expression):
+
+    exp: Expression
+    data_cases: list[tuple[ExpOrValue, ExpOrValue]]
+    default_case: Any
+
     def __init__ (self, exp: Expression) -> None:
+        super().__init__()
         self.exp = exp
-        self._cases = list[tuple[ExpOrValue, ExpOrValue]]()
-        self._default = NOT_SET
+        self.data_cases = []
+        self.default_case = NOT_SET
 
     def When (self, when: ExpOrValue, then: ExpOrValue) -> CaseExpression:
-        """Apply `WHEN {when} THEN {then}`"""
-        self._cases.append((when, then))
+        """Apply `WHEN {when} THEN {then}`
+        - Can be applied multiple times"""
+        self.data_cases.append((when, then))
         return self
 
     def Else (self, value: ExpOrValue) -> Expression:
         """Apply `ELSE {value}`
         - Use `.As(alias)` to Select as a Column"""
-        self._default = value
+        self.default_case = value
         return self
 
-    def to_sql (self) -> str:
-        return " ".join(
-            line
-            for line in (
-                f"CASE {to_sql_str(self.exp)}"
-                if self.exp is not E
-                else "CASE",
+    @override
+    def to_sql (self, *, table_alias=True):
+        if not self.data_cases:
+            raise ValueError(f"Expression().Case().When() should be called at least once")
 
-                *[f"WHEN {to_sql_str(when)} THEN {to_sql_str(then)}"
-                  for when, then in self._cases],
+        exp = to_sql(self.exp, table_alias=table_alias)
+        sql = DataSQL(
+            f"CASE {exp}"
+            if self.exp is not E
+            else "CASE",
+            exp.params
+        )
 
-                "" if self._default is NOT_SET
-                else f"ELSE {to_sql_str(self._default)}",
-
-                "END"
+        for when, then in self.data_cases:
+            when = to_sql(when, table_alias=table_alias)
+            then = to_sql(then, table_alias=table_alias)
+            sql.extend(
+                f"WHEN {when} THEN {then}",
+                [*when, *then],
             )
-            if line
+
+        if self.default_case is NOT_SET:
+            sql.extend(to_sql(self.default_case, table_alias=table_alias))
+
+        return sql
+
+class CastExpression (Expression):
+
+    as_type: str
+    exp: Expression
+
+    def __init__ (self, exp: Expression, as_type: str) -> None:
+        super().__init__()
+        self.exp = exp
+        self.as_type = as_type
+
+    @override
+    def to_sql (self, *, table_alias=True) -> DataSQL:
+        sql = self.exp.to_sql(table_alias=table_alias)
+        return DataSQL(
+            f"CAST({ sql } AS { self.as_type })",
+            sql.params
         )
 
 class NamedFunctionExpression (Expression):
-    def __init__ (self, name: str, *args: ExpOrValue) -> None:
-        self.name = name
-        self.args = args
 
-    def to_sql (self) -> str:
-        args = ", ".join(
-            to_sql_str(arg)
-            for arg in self.args
-            if arg is not E
-        )
-        return f"{self.name}({args})"
+    name: str
+
+    def __init__ (self, name: str, *values: ExpOrValue) -> None:
+        super().__init__(*values)
+        self.name = name
+
+    @override
+    def to_sql (self, *, table_alias=True):
+        all_params = []
+        sql_parts = list[str]()
+
+        for value in self.values:
+            sql = to_sql(value, table_alias=table_alias)
+            sql_parts.extend(sql.sqls)
+            all_params.extend(sql)
+
+        return DataSQL(f"{self.name}({ ", ".join(sql_parts) })", all_params)
 
 class UnaryExpression (Expression):
+
+    operator: str
+    right: ExpOrValue
+
     def __init__ (self, operator: str, right: ExpOrValue) -> None:
+        super().__init__()
         self.right = right
         self.operator = operator
 
-    def to_sql (self) -> str:
-        r = to_sql_str(self.right)
-        return (
-            f"{self.operator} ({r})"
+    @override
+    def to_sql (self, *, table_alias=True):
+        sql = to_sql(self.right, table_alias=table_alias)
+        return DataSQL(
+            f"{self.operator} ({ sql })"
             if self.operator in OPERATORS_FOR_PARENTESIS
-            else f"{self.operator} {r}"
+            else f"{self.operator} {sql}",
+            sql.params
         )
 
-class BinaryExpression (Expression):
+class BinaryExpression (UnaryExpression):
+
+    left: ExpOrValue
+
     def __init__ (self, left: ExpOrValue, operator: str, right: ExpOrValue) -> None:
-        self.operator = operator
-        self.left, self.right = left, right
+        super().__init__(operator, right)
+        self.left = left
 
-    def to_sql (self) -> str:
-        l, r = map(to_sql_str, [self.left, self.right])
-
-        sql = f"{l} {self.operator} {r}"
-        return (
-            f"({sql})"
+    @override
+    def to_sql (self, *, table_alias=True):
+        left = to_sql(self.left, table_alias=table_alias)
+        right = to_sql(self.right, table_alias=table_alias)
+        sql = (
+            f"({left} {self.operator} {right})"
             if self.operator in OPERATORS_FOR_PARENTESIS
-            else sql
+            else f"{left} {self.operator} {right}"
         )
+        return DataSQL(sql, [*left, *right])
 
 class BetweenExpression (Expression):
+
+    exp:  Expression
+    low:  ExpOrValue
+    high: ExpOrValue
+
     def __init__ (self, exp: Expression, low: ExpOrValue, high: ExpOrValue) -> None:
+        super().__init__()
         self.exp = exp
         self.low = low
         self.high = high
 
-    def to_sql (self) -> str:
-        return " ".join((
-            f"({to_sql_str(self.exp)}",
-            f"BETWEEN {to_sql_str(self.low)}",
-            f"AND {to_sql_str(self.high)})",
-        ))
+    @override
+    def to_sql (self, *, table_alias=True):
+        exp, low, high = (to_sql(x, table_alias=table_alias)
+                          for x in (self.exp, self.low, self.high))
+        sql = " ".join(( "(", str(exp), "BETWEEN", str(low), "AND", str(high), ")" ))
+        return DataSQL(sql, [*exp, *low, *high])
 
-type EmptyExpression = Expression
-E: EmptyExpression = Expression()
+class EmptyExpression (Expression):
+    @override    
+    def to_sql (self, *, table_alias=True) -> NoReturn:
+        raise NotImplementedError("Invalid use of E: EmptyExpression")
+
+E = EmptyExpression()
 """Build a `Expression` from a empty state
 #### A `Column` is a `Expression`
 <br>
@@ -509,4 +612,8 @@ E: EmptyExpression = Expression()
 `LOCAL_TIME` `LOCAL_TIMESTAMP`
 """
 
-__all__ = ["Expression", "E", "to_sql_str"]
+__all__ = [
+    "E",
+    "to_sql",
+    "Expression",
+]

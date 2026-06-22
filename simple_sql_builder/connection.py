@@ -8,7 +8,7 @@ from datetime import datetime, date, time
 # internal
 from simple_sql_builder.parameters import *
 from simple_sql_builder.shared import SequenceAny, ManySequenceAny, MappingAny
-from simple_sql_builder.supports import StatementWithParameter, SupportParameter
+from simple_sql_builder.supports import ExecutableStatement, SupportParameter
 
 class ICursorPEP249 (Protocol):
     def __iter__ (self) -> Self: ...
@@ -163,7 +163,7 @@ class Connection (SupportParameter):
     def cursor (self) -> Cursor:
         return Cursor(self.conn.cursor())
 
-    def execute (self, statement: StatementWithParameter, **kwargs) -> ResultSQL:
+    def execute (self, statement: ExecutableStatement, **kwargs) -> ResultSQL:
         """Execute `Statement`
         - Type of `PositionalParameter` guessed on `init` by `conn` name
             - `set_parameter()` to manually set

@@ -1,8 +1,9 @@
 # std
+from __future__ import annotations
 from typing import (
     Any, Self,
-    Literal, Protocol,
     Sequence, Mapping,
+    overload
 )
 
 type SequenceAny = Sequence[Any]
@@ -13,40 +14,56 @@ def quote (s: str) -> str:
     """Quote `s` if contains space"""
     return f'"{s}"' if " " in s else s
 
-class OrderableExpression (Protocol):
-    """Interface for a `Column` or `Expression` to be `ORDER BY`"""
+class DataSQL:
+    __slots__ = ("sqls", "params")
+    sqls: list[str]
+    """`SQLs: Parameterized`
+    - Formatted as Python Positional Parameter `{}`"""
+    params: list[Any]
+    """Positional parameters of `sqls`"""
 
-    order: Literal["ASC", "DESC"]
-    nulls: Literal["FIRST", "LAST"] | None
+    def __init__ (self, sql: str, params: SequenceAny) -> None:
+        self.sqls = [sql]
+        self.params = params if isinstance(params, list) else [*params]
 
-    @property
-    def NullsFirst (self) -> Self:
-        """Apply `NULLS FIRST`"""
-        ...
+    @classmethod
+    def from_parts (cls, sql_parts: list[str], params: list[Any]) -> DataSQL:
+        sql = object.__new__(cls)
+        sql.sqls = sql_parts
+        sql.params = params
+        return sql
 
-    @property
-    def NullsLast (self) -> Self:
-        """Apply `NULLS LAST`"""
-        ...
+    def __repr__ (self) -> str:
+        return f"<ParamsSQL => {self.params} {self.join()}>"
 
-    def to_sql (self) -> str:
-        ...
+    def __str__ (self) -> str:
+        return self.join()
 
-class AliasedColumn (Protocol):
-    """Inteface for a `Column` or `Expression` with alias `AS`"""
+    def __iter__ (self):
+        yield from self.params
 
-    alias: str
-    """Quoted `alias`"""
+    @overload
+    def extend (self, sql: DataSQL) -> Self: ...
+    @overload
+    def extend (self, sql: str, params: SequenceAny | None = None) -> Self: ...
+    def extend (self, sql: str | DataSQL, params: SequenceAny | None = None) -> Self:
+        if isinstance(sql, DataSQL):
+            self.sqls.extend(sql.sqls)
+            self.params.extend(sql)
+        else:
+            self.sqls.append(sql)
+            self.params.extend(params or [])
+        return self
 
-    def to_sql (self) -> str:
-        """`SQL: {Column|Expression} AS {alias}`"""
-        ...
+    def join (self, string=" ") -> str:
+        """`SQL: Parameterized`
+        - `string` used to concat `sqls`
+        - Formatted as Python Positional Parameter `{}`"""
+        return string.join(self.sqls)
 
 __all__ = [
     "quote",
-    "AliasedColumn",
-    "OrderableExpression",
-
+    "DataSQL",
     "MappingAny",
     "SequenceAny",
     "ManySequenceAny",

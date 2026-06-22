@@ -1,103 +1,104 @@
 # std
 from __future__ import annotations
-from typing import Any, Self, Literal, override
+from typing import Any, Literal, override
 # internal
-from simple_sql_builder.shared import (
-    quote,
-    OrderableExpression,
-    AliasedColumn as _AliasedColumn
+from simple_sql_builder.shared import quote, DataSQL
+from simple_sql_builder.expression import (
+    Expression,
+    LiteralExpression, ConstantExpression,
+    OrderableExpression, AliasedExpression
 )
-from simple_sql_builder.expression import Expression, LiteralExpression, ConstantExpression
 
-class Orderable (OrderableExpression):
-    def __init__(self, order: Literal["ASC", "DESC"], column: Column | AliasedColumn) -> None:
-        self.nulls = None
-        self.order = order
+class OrderableColumn (OrderableExpression):
+
+    column: Column | AliasedColumn
+
+    def __init__ (self, order: Literal["ASC", "DESC"], column: Column | AliasedColumn) -> None:
+        super().__init__(order, self)
         self.column = column
 
-    def __repr__ (self) -> str:
-        return f"<Orderable => {self.to_sql()}>"
-
-    @property
-    def NullsFirst (self) -> Self:
-        self.nulls = "FIRST"
-        return self
-
-    @property
-    def NullsLast (self) -> Self:
-        self.nulls = "LAST"
-        return self
-
-    def to_sql (self) -> str:
+    def to_sql (self, *, table_alias=True):
         """`SQL: (alias|ta.name) ASC|DESC [NULLS FIRST|LAST]` version"""
         name = (
             self.column.alias
             if isinstance(self.column, AliasedColumn)
-            else self.column.to_sql()
+            else self.column.to_sql(table_alias=table_alias).join()
         )
-        return (
+        return DataSQL(
             f"{name} {self.order}"
             if self.nulls is None else
-            f"{name} {self.order} NULLS {self.nulls}"
+            f"{name} {self.order} NULLS {self.nulls}",
+            []
         )
 
-class AliasedColumn (_AliasedColumn, Expression):
-    def __init__(self, column: Column | None, alias: str) -> None:
+class AliasedColumn (AliasedExpression):
+
+    alias: str
+    column: Column | None
+
+    def __init__ (self, column: Column | None, alias: str) -> None:
         self.column = column
         self.alias = quote(alias)
 
-    def __repr__ (self) -> str:
-        return f"<AliasedColumn => {self.to_sql()}>"
-
-    def to_sql (self) -> str:
+    @override
+    def to_sql (self, *, table_alias=True):
         """`SQL: [{Column} AS] {alias}`"""
-        return (
-            f"{self.column.to_sql()} AS {self.alias}"
-            if self.column is not None
-            else self.alias
-        )
+        c = self.column
+        if c is None: return DataSQL(self.alias, [])
+        return c.to_sql(table_alias=table_alias).extend(f"AS {self.alias}")
 
     #-----------#
     # Orderable #
     #-----------#
 
     @property
-    def ASC (self) -> Orderable: # type: ignore
+    def ASC (self) -> OrderableColumn:
         """Apply `{alias} ASC` for `Select.Orderby`"""
-        return Orderable("ASC", self)
+        return OrderableColumn("ASC", self)
 
     @property
-    def DESC (self) -> Orderable: # type: ignore
+    def DESC (self) -> OrderableColumn:
         """Apply `{alias} DESC` for `Select.Orderby`"""
-        return Orderable("DESC", self)
+        return OrderableColumn("DESC", self)
 
 class ColumnWithValue (LiteralExpression):
+
+    column: Column
+
     def __init__ (self, value: Any, column: Column) -> None:
         super().__init__(value)
         self.column = column
 
-    def __repr__(self) -> str:
-        return f"<ColumnWithValue {self.column.name}={self.value}>"
-
 class ColumnWithDefaultValue (ConstantExpression):
+
+    column: Column
+
     def __init__ (self, name: str, column: Column) -> None:
         super().__init__(name)
         self.column = column
 
 class Column (Expression):
+
+    ta: str
+    name: str
+
     def __init__ (self, name: str, table_alias: str) -> None:
         self.name = name
         self.ta = table_alias
 
-    def __repr__ (self) -> str:
-        return f"<Column => {self.to_sql()}>"
-
     def __hash__ (self) -> int:
         return hash((self.name, self.ta))
 
-    def to_sql (self) -> str:
+    @override
+    def to_sql (self, *, table_alias=True):
         """`SQL: table_alias.name` version"""
-        return f"{self.ta}.{quote(self.name)}"
+        name = quote(self.name)
+        return DataSQL(
+            f"{self.ta}.{name}"
+            if table_alias
+            else name,
+            []
+        )
 
     def As (self, alias: str) -> AliasedColumn:
         """Apply `able_alias.name AS alias`"""
@@ -106,6 +107,11 @@ class Column (Expression):
     @override
     def Value (self, value: Any) -> ColumnWithValue:
         """Create a `Value` for the `Column`"""
+        if isinstance(value, Expression):
+            raise TypeError(
+                "Column.Value(value) should be a Literal Value not an Expression. "
+                "Consider using (Expression).As(alias)"
+            )
         return ColumnWithValue(value, self)
 
     @property
@@ -117,14 +123,14 @@ class Column (Expression):
     #-----------#
 
     @property
-    def ASC (self) -> Orderable: # type: ignore
+    def ASC (self) -> OrderableColumn:
         """Apply `{ta.name} ASC` for `Select.Orderby`"""
-        return Orderable("ASC", self)
+        return OrderableColumn("ASC", self)
 
     @property
-    def DESC (self) -> Orderable: # type: ignore
+    def DESC (self) -> OrderableColumn:
         """Apply `{ta.name} DESC` for `Select.Orderby`"""
-        return Orderable("DESC", self)
+        return OrderableColumn("DESC", self)
 
 class AliasedColumnBuilder:
     def __call__ (self, alias: str) -> AliasedColumn:
