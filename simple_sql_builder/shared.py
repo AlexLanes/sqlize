@@ -33,6 +33,17 @@ class DataSQL:
         sql.params = params
         return sql
 
+    @classmethod
+    def merge (cls, datas: Sequence[DataSQL]) -> DataSQL:
+        sql = object.__new__(cls)
+        sql.sqls = []
+        sql.params = []
+
+        for data in datas:
+            sql.extend(data)
+
+        return sql
+
     def __repr__ (self) -> str:
         return f"<ParamsSQL => {self.params} {self.join()}>"
 
