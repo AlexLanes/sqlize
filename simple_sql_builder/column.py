@@ -4,7 +4,7 @@ from typing import Any, Literal, override
 # internal
 from simple_sql_builder.shared import quote, DataSQL
 from simple_sql_builder.expression import (
-    Expression,
+    Expression, E,
     LiteralExpression, ConstantExpression,
     OrderableExpression, AliasedExpression
 )
@@ -34,18 +34,21 @@ class OrderableColumn (OrderableExpression):
 class AliasedColumn (AliasedExpression):
 
     alias: str
+    """Quoted `alias`"""
     column: Column | None
 
     def __init__ (self, column: Column | None, alias: str) -> None:
+        self.values = tuple()
         self.column = column
         self.alias = quote(alias)
 
     @override
     def to_sql (self, *, table_alias=True):
         """`SQL: [{Column} AS] {alias}`"""
-        c = self.column
-        if c is None: return DataSQL(self.alias, [])
-        return c.to_sql(table_alias=table_alias).extend(f"AS {self.alias}")
+        if self.column is None:
+            return DataSQL(self.alias, [])
+        sql = self.column.to_sql(table_alias=table_alias)
+        return DataSQL(f"{sql.join()} AS {self.alias}", sql.params)
 
     #-----------#
     # Orderable #

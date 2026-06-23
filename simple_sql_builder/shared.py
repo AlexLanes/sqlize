@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import (
     Any, Self,
-    Sequence, Mapping,
+    Iterable, Sequence, Mapping,
     overload
 )
 
@@ -34,7 +34,7 @@ class DataSQL:
         return sql
 
     @classmethod
-    def merge (cls, datas: Sequence[DataSQL]) -> DataSQL:
+    def merge (cls, datas: Iterable[DataSQL]) -> DataSQL:
         sql = object.__new__(cls)
         sql.sqls = []
         sql.params = []
