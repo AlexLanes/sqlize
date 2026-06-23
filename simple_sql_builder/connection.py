@@ -168,7 +168,7 @@ class Connection (SupportParameter):
         - Type of `PositionalParameter` guessed on `init` by `conn` name
             - `set_parameter()` to manually set
         - `kwargs` additional params `execute()` or `executemany()` accepts"""
-        statement.parameter = self.parameter
+        statement.set_parameter(self.parameter.identifier) # type: ignore
         sql, params = statement.to_sql()
 
         cursor = self.cursor()
