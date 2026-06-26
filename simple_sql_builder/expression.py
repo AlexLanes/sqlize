@@ -208,12 +208,16 @@ class Expression (AbstractExpression):
         """Apply `self <= {other}`"""
         return BinaryExpression(self, "<=", other)
 
-    def In (self, values: Iterable[ExpOrValue]) -> Expression:
+    def In (self, values: Iterable[ExpOrValue] | Select | Union) -> Expression:
         """Apply `self IN ({ values })`"""
-        return BinaryExpression(self, "IN", tuple(values))
+        return (
+            SubqueryExpression(self, "IN", values)
+            if isinstance(values, Queryable)
+            else BinaryExpression(self, "IN", tuple(values))
+        )
 
     def Exists (self, subquery: Select | Union) -> Expression:
-        """Apply `EXISTS ({ select })`"""
+        """Apply `EXISTS ({ subquery })`"""
         return SubqueryExpression(None, "EXISTS", subquery)
 
     def Like (self, t: ExpOrString) -> Expression:
@@ -651,6 +655,7 @@ E = EmptyExpression()
 `LOCAL_TIME` `LOCAL_TIMESTAMP`
 """
 
+# Avoids Circular Reference
 from .select import Select, Union, Queryable
 
 __all__ = [
