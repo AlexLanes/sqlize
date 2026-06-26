@@ -567,7 +567,7 @@ class SubqueryExpression (Expression):
 
     left: ExpOrValue | None
     operator: str
-    subquery: Select | Union
+    subquery: Queryable
 
     def __init__ (self, left: ExpOrValue | None, operator: str, subquery: Select | Union) -> None:
         if subquery.collect_ctes():
@@ -589,7 +589,7 @@ class SubqueryExpression (Expression):
 
         sql_parts.append(self.operator)
 
-        sql, params = self.subquery.to_sql()
+        sql, params = self.subquery.to_sql(render_cte=False, use_parameter=False)
         sql_parts.append(f"(\n{ indent(sql) }\n)")
         all_params.extend(params)
 
@@ -651,7 +651,7 @@ E = EmptyExpression()
 `LOCAL_TIME` `LOCAL_TIMESTAMP`
 """
 
-from .select import Select, Union
+from .select import Select, Union, Queryable
 
 __all__ = [
     "E",

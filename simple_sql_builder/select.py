@@ -1,9 +1,11 @@
 # std
 from __future__ import annotations
-from typing import Self, Literal, override
+from typing import (
+    Any, Self, Literal,
+    Iterable, override
+)
 # internal
-from .shared     import SequenceAny, DataSQL
-from .parameters import IPositionalParameter, Positionals
+from .shared     import SequenceAny, DataSQL, indent
 from .expression import Expression, AliasedExpression
 from .column     import Column, AliasedColumn
 from .table      import Table
@@ -15,17 +17,9 @@ class CteCollector:
 
 class Queryable (ExecutableStatement, SupportsPaging, SupportsOrderBy, CteCollector):
 
-    param: IPositionalParameter
-
     @override
-    def to_sql (self, *, render_cte=True) -> tuple[str, SequenceAny]:
+    def to_sql (self, *, render_cte=True, use_parameter=True) -> tuple[str, SequenceAny]:
         raise NotImplementedError
-
-    @override
-    def set_parameter (self, positional: Positionals) -> Self:
-        super().set_parameter(positional)
-        self.param = self.parameter()
-        return self
 
 class CteTable (Table, CteCollector):
 
@@ -67,12 +61,11 @@ class Union (Queryable):
     left: Queryable
     right: Queryable
 
-    def __init__ (self, _all: bool, left: Queryable, right: Select, param: IPositionalParameter) -> None:
+    def __init__ (self, _all: bool, left: Queryable, right: Select) -> None:
         super().__init__()
         self.all = _all
         self.left = left
         self.right = right
-        self.param = param
 
     def __repr__ (self) -> str:
         return f"<UNION {"ALL" if self.all else ""}>"
@@ -86,11 +79,20 @@ class Union (Queryable):
 
     @override
     def to_sql (self, **kwargs) -> tuple[str, SequenceAny]:
-        sql_parts = []
-        all_params = []
+        sql_parts = list[str]()
+        all_params = list[Any]()
+        parameter = self.parameter()
+        use_parameter = bool(kwargs.get("use_parameter", True))
 
-        render_cte = kwargs.get("render_cte", True)
-        self.left.param = self.right.param = self.param
+        def sql_format (sql: str, params: Iterable[Any]) -> str:
+            all_params.extend(params)
+            return (
+                sql.format(*(parameter.next() for _ in params))
+                if use_parameter
+                else sql
+            )
+
+        render_cte = bool(kwargs.get("render_cte", True))
         union_name = "UNION ALL" if self.all else "UNION"
 
         for item in (self.left, "", union_name, self.right):
@@ -98,10 +100,8 @@ class Union (Queryable):
                 case None: pass
                 case str(): sql_parts.append(item)
                 case Queryable() as query:
-                    sql, params = query.to_sql(render_cte=render_cte)
-                    parameters = (self.param.next() for _ in params)
-                    sql_parts.append(sql)
-                    all_params.extend(params)
+                    sql, params = query.to_sql(render_cte=render_cte, use_parameter=use_parameter)
+                    sql_parts.append(sql_format(sql, params))
                 case _: raise ValueError(
                     f"Invalid item found on Union: {item!r}"
                 )
@@ -110,19 +110,17 @@ class Union (Queryable):
         for data in (self.data_orderby, self.data_paging_sql):
             if data is None: continue
             if not spaced: spaced = sql_parts.append("") is None
-            parameters = (self.param.next() for _ in data)
-            sql_parts.append(data.join().format(*parameters))
-            all_params.extend(data)
+            sql_parts.append(sql_format(data.join(), data))
 
         return "\n".join(sql_parts), all_params
 
     def Union (self, select: Select) -> Union:
         """Apply `self UNION {select}`"""
-        return Union(False, self, select, self.param)
+        return Union(False, self, select)
 
     def UnionAll (self, select: Select) -> Union:
         """Apply `self UNION ALL {select}`"""
-        return Union(True, self, select, self.param)
+        return Union(True, self, select)
 
     def AsCte (self, name: str) -> CteTable:
         """Transform `Union` into a `CTE` that works as a `Table`"""
@@ -202,7 +200,6 @@ class Select (Queryable, SupportsWhere):
             raise ValueError("No columns informed on Select(). Consider using Select(T.table.All())")
 
         self.distinct = False
-        self.param = self.parameter()
         self.data_columns = list(columns)
         self.data_joins = []
         self.table = self.data_groupby = self.data_having = None
@@ -217,61 +214,69 @@ class Select (Queryable, SupportsWhere):
 
     @override
     def collect_ctes (self) -> list[CteTable]:
-        cte_tables = [
+        return [
             cte
             for table in (self.table, *(t for _, t, _ in self.data_joins))
                 if isinstance(table, CteTable)
             for cte in table.collect_ctes()
         ]
-        for cte in cte_tables:
-            cte._q_.param = self.param
-        return cte_tables
 
     @override
     def to_sql (self, **kwargs) -> tuple[str, SequenceAny]:
         if self.table is None:
             raise ValueError("Table not set on Select().From(Table)")
 
+        all_params = list[Any]()
+        parameter = self.parameter()
+        use_parameter = bool(kwargs.get("use_parameter", True))
+
+        def sql_format (sql: str, params: Iterable[Any]) -> str:
+            return (
+                sql.format(*(parameter.next() for _ in params))
+                if use_parameter
+                else sql
+            )
+
         # SELECT FROM
         data = DataSQL.merge(x.to_sql() for x in self.data_columns)
-        parameters = (self.param.next() for _ in data)
-        sql_parts = [f"SELECT{ "DISTINCT" if self.distinct else " " }{ data.join(", ").format(*parameters) }",
-                     f"FROM {self.table.to_table_sql()}"]
-        all_params = [*data]
+        all_params.extend(data)
+        sql = sql_format(data.join(", "), data)
+        sql_parts = [
+            f"SELECT{ " DISTINCT" if self.distinct else "" } {sql}",
+            f"FROM { self.table.to_table_sql() }"
+        ]
 
         # JOINS
         for name, table, data in self.data_joins:
-            parameters = (self.param.next() for _ in data)
-            sql_parts.append(f"{name} JOIN {table.to_table_sql()} ON { data.join().format(*parameters) }")
             all_params.extend(data)
+            sql = sql_format(data.join(), data)
+            sql_parts.append(f"{name} JOIN {table.to_table_sql()} ON {sql}")
 
         # WHERE GROUPBY HAVING ORDERBY PAGING
         for data in (self.data_where, self.data_groupby, self.data_having, self.data_orderby, self.data_paging_sql):
             if data is None: continue
-            parameters = (self.param.next() for _ in data)
-            sql_parts.append(data.join().format(*parameters))
             all_params.extend(data)
+            sql_parts.append(sql_format(data.join(), data))
 
-        # CTE Table
+        # No CTE Table
         cte_tables = self.collect_ctes()
-        render_cte = kwargs.get("render_cte", True)
+        render_cte = bool(kwargs.get("render_cte", True))
         if not render_cte or not cte_tables:
             return "\n".join(sql_parts), all_params
 
+        # CTE Table
         cte_tables.reverse()
         last = cte_tables[-1]
         cte_parts, cte_params = ["WITH"], []
 
         for cte in cte_tables:
-            sql, params = cte._q_.to_sql(render_cte=False)
+            sql, params = cte._q_.to_sql(render_cte=False, use_parameter=False)
             cte_params.extend(params)
-            cte_parts.append(
-                "\n".join((
-                    f"{cte._td_.name} AS (",
-                    *(f"    {line}" for line in sql.split("\n")),
-                    ")" if cte is last else "),"
-                ))
-            )
+            cte_parts.extend((
+                f"{cte._td_.name} AS (",
+                sql_format(indent(sql), params),
+                ")" if cte is last else "),"
+            ))
 
         cte_params.extend(all_params)
         return "\n".join(
@@ -387,7 +392,7 @@ class Select (Queryable, SupportsWhere):
         .Limit(3)
         ```
         """
-        return Union(False, self, select, self.param)
+        return Union(False, self, select)
 
     def UnionAll (self, select: Select) -> Union:
         """Apply `self UNION ALL {select}`
@@ -408,6 +413,6 @@ class Select (Queryable, SupportsWhere):
         .Limit(3)
         ```
         """
-        return Union(True, self, select, self.param)
+        return Union(True, self, select)
 
 __all__ = ["Select"]
