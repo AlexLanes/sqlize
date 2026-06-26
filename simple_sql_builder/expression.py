@@ -6,15 +6,18 @@ from typing import (
     Iterable, Literal, NoReturn
 )
 # internal
-from simple_sql_builder.shared import quote, DataSQL
+from simple_sql_builder.shared import (
+    DataSQL,
+    quote, indent,
+)
 
 type ExpOrValue  = Expression | Any
 type ExpOrString = Expression | str
 
 NOT_SET = object()
 OPERATORS_FOR_PARENTESIS = {
-    "IN", "NOT", "AND", "OR",
-    "/", "*"
+    "NOT", "AND", "OR",
+    "IN",  "/", "*"
 }
 
 def to_sql (value: object, *, table_alias=True) -> DataSQL:
@@ -57,23 +60,6 @@ class AbstractExpression (ABC):
         - `table_alias` used to remove the table alias from columns
         - Formatted as Python Positional Parameter `{}` to `self.values`"""
         ...
-
-class AliasedExpression (AbstractExpression):
-    """`Expression` with alias `AS`"""
-
-    alias: str
-    """Quoted `alias`"""
-
-    def __init__ (self, expression: Expression, alias: str) -> None:
-        super().__init__()
-        self.alias = quote(alias)
-        self.expression = expression
-
-    @override
-    def to_sql (self, *, table_alias=True):
-        """`SQL: ({ Expression }) AS {alias}`"""
-        sql = to_sql(self.expression, table_alias=table_alias)
-        return DataSQL(f"({ sql }) AS {self.alias}", sql.params)
 
 class OrderableExpression (AbstractExpression):
 
@@ -225,6 +211,10 @@ class Expression (AbstractExpression):
     def In (self, values: Iterable[ExpOrValue]) -> Expression:
         """Apply `self IN ({ values })`"""
         return BinaryExpression(self, "IN", tuple(values))
+
+    def Exists (self, subquery: Select | Union) -> Expression:
+        """Apply `EXISTS ({ select })`"""
+        return SubqueryExpression(None, "EXISTS", subquery)
 
     def Like (self, t: ExpOrString) -> Expression:
         """Apply `self LIKE {t}`
@@ -397,6 +387,23 @@ class Expression (AbstractExpression):
         - Use `.As(alias)` to Select as a Column"""
         return NamedFunctionExpression("AVG", self)
 
+class AliasedExpression (Expression):
+    """`Expression` with alias `AS`"""
+
+    alias: str
+    """Quoted `alias`"""
+
+    def __init__ (self, expression: Expression, alias: str) -> None:
+        super().__init__()
+        self.alias = quote(alias)
+        self.expression = expression
+
+    @override
+    def to_sql (self, *, table_alias=True):
+        """`SQL: ({ Expression }) AS {alias}`"""
+        sql = to_sql(self.expression, table_alias=table_alias)
+        return DataSQL(f"({ sql }) AS {self.alias}", sql.params)
+
 class LiteralExpression (Expression):
     @override
     def to_sql (self, *, table_alias=True):
@@ -556,6 +563,38 @@ class BinaryExpression (UnaryExpression):
         )
         return DataSQL(sql, [*left, *right])
 
+class SubqueryExpression (Expression):
+
+    left: ExpOrValue | None
+    operator: str
+    subquery: Select | Union
+
+    def __init__ (self, left: ExpOrValue | None, operator: str, subquery: Select | Union) -> None:
+        if subquery.collect_ctes():
+            raise ValueError("CTEs not supported on Expression.Exists(subquery)")
+
+        super().__init__()
+        self.left = left
+        self.operator = operator
+        self.subquery = subquery
+
+    @override
+    def to_sql (self, *, table_alias=True):
+        sql_parts, all_params = [], []
+
+        if self.left is not None:
+            sql = to_sql(self.left, table_alias=table_alias)
+            sql_parts.extend(sql.sqls)
+            all_params.extend(sql)
+
+        sql_parts.append(self.operator)
+
+        sql, params = self.subquery.to_sql()
+        sql_parts.append(f"(\n{ indent(sql) }\n)")
+        all_params.extend(params)
+
+        return DataSQL.from_parts(sql_parts, all_params)
+
 class BetweenExpression (Expression):
 
     exp:  Expression
@@ -611,6 +650,8 @@ E = EmptyExpression()
 `CURRENT_DATE` `CURRENT_TIME` `CURRENT_TIMESTAMP`  
 `LOCAL_TIME` `LOCAL_TIMESTAMP`
 """
+
+from .select import Select, Union
 
 __all__ = [
     "E",

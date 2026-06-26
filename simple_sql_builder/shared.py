@@ -14,6 +14,13 @@ def quote (s: str) -> str:
     """Quote `s` if contains space"""
     return f'"{s}"' if " " in s else s
 
+def indent (sql: str) -> str:
+    """Indent lines do `sql` by 4 spaces"""
+    return "\n".join(
+        "    " + line
+        for line in sql.split("\n")
+    )
+
 class DataSQL:
     __slots__ = ("sqls", "params")
     sqls: list[str]
@@ -74,6 +81,7 @@ class DataSQL:
 
 __all__ = [
     "quote",
+    "indent",
     "DataSQL",
     "MappingAny",
     "SequenceAny",
