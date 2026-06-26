@@ -8,3 +8,4 @@ from simple_sql_builder.connection import Connection
 # DMLs
 from simple_sql_builder.insert import InsertMany, InsertOne
 from simple_sql_builder.select import Select
+from simple_sql_builder.update import Update
