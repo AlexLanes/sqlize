@@ -10,7 +10,7 @@ from simple_sql_builder.connections import Connection, ResultSQL
 # external
 try: from psycopg import connect, Connection as ConnectionPG
 except ImportError:
-    raise TypeError("Optional dependency [postgresql] needed")
+    raise TypeError("Optional dependency [postgresql] needed to use 'simple_sql_builder.connections.postgresql'")
 
 class PostgreSQL (Connection):
     """`Connection` for `PostgreSQL` database using external `psycopg[binary]`
@@ -55,7 +55,7 @@ class PostgreSQL (Connection):
         return cursor.execute(sql, params, **kwargs)
 
     def tables (self, schema: str | None = None) -> list[TableData]:
-        """List Tables and Views of Database"""
+        """List Tables Data of Database"""
         cursor = self.cursor()
         if schema is None:
             sql = """
