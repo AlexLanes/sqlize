@@ -5,11 +5,11 @@ from typing import (
     Iterable, override
 )
 # internal
-from .shared     import SequenceAny, DataSQL, indent
-from .expression import Expression, AliasedExpression
-from .column     import Column, AliasedColumn
-from .table      import Table
-from .supports   import *
+from simple_sql_builder.shared     import SequenceAny, DataSQL, indent
+from simple_sql_builder.expression import Expression, AliasedExpression
+from simple_sql_builder.column     import Column, AliasedColumn
+from simple_sql_builder.table      import Table
+from simple_sql_builder.supports   import *
 
 class CteCollector:
     def collect_ctes (self) -> list[CteTable]:

@@ -2,11 +2,11 @@
 from __future__ import annotations
 from typing import Self, override
 # internal
-from .shared import SequenceAny
-from .expression import Expression, to_sql
-from .column import ColumnWithValue, ColumnWithDefaultValue, AliasedExpression
-from .table import Table
-from .supports import ExecutableStatement, SupportsReturning, SupportsWhere
+from simple_sql_builder.shared import SequenceAny
+from simple_sql_builder.expression import Expression, to_sql
+from simple_sql_builder.column import ColumnWithValue, ColumnWithDefaultValue, AliasedExpression
+from simple_sql_builder.table import Table
+from simple_sql_builder.supports import ExecutableStatement, SupportsReturning, SupportsWhere
 
 class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     """Builder of `Update` Statement
@@ -73,7 +73,7 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
                 case ColumnWithValue():
                     name = value.column.name
                     sets.append(f"{name} = {positional.next()}")
-                    params.extend(value.values)
+                    params.extend(value.params)
 
                 case ColumnWithDefaultValue():
                     name = value.column.name

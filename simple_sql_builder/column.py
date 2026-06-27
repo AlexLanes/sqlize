@@ -38,8 +38,8 @@ class AliasedColumn (AliasedExpression):
     column: Column | None
 
     def __init__ (self, column: Column | None, alias: str) -> None:
-        self.values = tuple()
         self.column = column
+        self.params = tuple()
         self.alias = quote(alias)
 
     @override

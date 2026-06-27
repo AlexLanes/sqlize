@@ -2,11 +2,11 @@
 from __future__ import annotations
 from typing import Self, override
 # internal
-from .shared import ManySequenceAny, SequenceAny
-from .expression import AliasedExpression, to_sql
-from .column import ColumnWithValue, ColumnWithDefaultValue
-from .table import Table
-from .supports import SupportsReturning, ExecutableStatement
+from simple_sql_builder.shared import ManySequenceAny, SequenceAny
+from simple_sql_builder.expression import AliasedExpression, to_sql
+from simple_sql_builder.column import ColumnWithValue, ColumnWithDefaultValue
+from simple_sql_builder.table import Table
+from simple_sql_builder.supports import SupportsReturning, ExecutableStatement
 
 class InsertDefaultValues (ExecutableStatement, SupportsReturning):
 
@@ -88,7 +88,7 @@ class InsertOne (ExecutableStatement, SupportsReturning):
                 case ColumnWithValue():
                     columns.append(value.column.name)
                     values.append(positional.next())
-                    params.extend(value.values)
+                    params.extend(value.params)
 
                 case ColumnWithDefaultValue():
                     columns.append(value.column.name)
@@ -185,7 +185,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
                 tuple(
                     value
                     for column in columns
-                    for value in [*column.values, *params]
+                    for value in [*column.params, *params]
                 )
                 for columns in self.data_values
             ]

@@ -40,10 +40,10 @@ def to_sql (value: object, *, table_alias=True) -> DataSQL:
 
 class AbstractExpression (ABC):
 
-    values: tuple[Any, ...]
+    params: tuple[Any, ...]
 
     def __init__ (self, *values: Any) -> None:
-        self.values = tuple(
+        self.params = tuple(
             value
             for value in values
             if value is not E
@@ -411,12 +411,12 @@ class AliasedExpression (Expression):
 class LiteralExpression (Expression):
     @override
     def to_sql (self, *, table_alias=True):
-        return DataSQL("{}", self.values)
+        return DataSQL("{}", self.params)
 
 class ConstantExpression (Expression):
     @override
     def to_sql (self, *, table_alias=True):
-        return DataSQL(str(self.values[-1]), [])
+        return DataSQL(str(self.params[-1]), [])
 
 class ConcatExpression (Expression):
 
@@ -429,7 +429,7 @@ class ConcatExpression (Expression):
     @override
     def to_sql (self, *, table_alias=True):
         sqls, params = [], []
-        generator = (to_sql(v, table_alias=table_alias) for v in self.values)
+        generator = (to_sql(v, table_alias=table_alias) for v in self.params)
 
         for sql in generator:
             sqls.extend(sql.sqls)
@@ -521,7 +521,7 @@ class NamedFunctionExpression (Expression):
         all_params = []
         sql_parts = list[str]()
 
-        for value in self.values:
+        for value in self.params:
             sql = to_sql(value, table_alias=table_alias)
             sql_parts.extend(sql.sqls)
             all_params.extend(sql)
@@ -656,7 +656,7 @@ E = EmptyExpression()
 """
 
 # Avoids Circular Reference
-from .select import Select, Union, Queryable
+from .dml.select import Select, Union, Queryable
 
 __all__ = [
     "E",
