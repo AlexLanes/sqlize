@@ -11,3 +11,4 @@ wheels/
 
 # Teste
 teste.py
+*.sqlite
