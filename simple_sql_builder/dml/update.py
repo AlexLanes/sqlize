@@ -14,14 +14,14 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     ## Example
     ```python
     from simple_sql_builder import E, A, T, Update
-    a = T.actor
 
     # Simple Values
+    a = T.actor
     update = (
         Update(a)
         .Set(a.first_name.Value("Bar"), a.last_name.Value("Foo"))
         .Where(a.actor_id == 1)
-        .Returning(A.All())
+        .Returning(a.All())
     )
 
     # Default + Expression
@@ -42,26 +42,28 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     )
 
     # Transform
-    sql, params = update.to_sql(allow_empty_where=False)
+    sql, params = update.to_sql()
     ```
     """
 
     table: Table
+    allow_empty_where: bool
     data_set: list[ColumnWithValue | ColumnWithDefaultValue | AliasedExpression]
 
-    def __init__ (self, table: Table) -> None:
+    def __init__ (self, table: Table, *, allow_empty_where=False) -> None:
         super().__init__()
         self.table = table
         self.data_set = []
+        self.allow_empty_where = allow_empty_where
 
     def __repr__ (self) -> str:
         return f"<UPDATE {self.table.to_table_name()!r} {len(self.data_set)} Columns(s)>"
 
     @override
-    def to_sql (self, *, allow_empty_where=False) -> tuple[str, SequenceAny]:
+    def to_sql (self) -> tuple[str, SequenceAny]:
         if not self.data_set:
             raise ValueError("Update().Set() should be called first")
-        if not allow_empty_where and self.data_where is None:
+        if not self.allow_empty_where and self.data_where is None:
             raise ValueError("Missing Update().Where(Expression)")
 
         params = []
