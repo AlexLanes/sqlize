@@ -3,8 +3,8 @@ from __future__ import annotations
 from json import dumps
 from decimal import Decimal
 from dataclasses import dataclass
-from typing import Protocol, Any, Self
 from datetime import datetime, date, time
+from typing import Protocol, Any, Self, Iterator
 # internal
 from simple_sql_builder.parameters import *
 from simple_sql_builder.shared import SequenceAny, ManySequenceAny, MappingAny
@@ -29,10 +29,16 @@ class IConnectionPEP249 (Protocol):
 
 @dataclass
 class ResultSQL:
+    """SQL dataclass of `Connection.execute()` `Cursor.execute()` `Cursor.executemany()`
+    - `bool(result)` to check for `rowcount` or `rows returned`
+    - `for line in result: ...`"""
 
     rowcount: int
+    """Affected lines"""
     columns: tuple[str, ...]
+    """Columns names of `rows returned`"""
     rows: list[SequenceAny]
+    """Sequence of values of `rows returned`"""
 
     def __bool__ (self) -> bool:
         return bool(self.rowcount or self.returned)
@@ -40,22 +46,26 @@ class ResultSQL:
     def __repr__ (self) -> str:
         return f"<ResultSQL rowcount={self.rowcount} returned={self.returned}>"
 
+    def __iter__ (self) -> Iterator[MappingAny]:
+        for row in self.rows:
+            yield dict(zip(self.columns, row))
+
     @property
     def returned (self) -> int:
+        """Rows returned"""
         return len(self.rows)
 
     @property
     def first (self) -> MappingAny:
-        rows = self.rows[0] if self.rows else []
-        return dict(zip(self.columns, rows))
+        """First row returned or `{}` if empty"""
+        return next(self.__iter__()) if self.rows else {}
 
     def to_dict (self) -> list[MappingAny]:
-        return [
-            dict(zip(self.columns, row))
-            for row in self.rows
-        ]
+        """Transform `rows` and `columns` to `list[dict]`"""
+        return list(self)
 
-    def stringify (self, indent: int = 4) -> str:
+    def stringify (self, indent: bool = False) -> str:
+        """Transform of `result.to_dict()` to `JSON String`"""
         def defaults (item: Any) -> Any:
             match item:
                 case datetime(): return item.isoformat(sep="T", timespec="seconds")
@@ -65,12 +75,15 @@ class ResultSQL:
                 case 1 if hasattr(item, "__iter__"):
                     return [defaults(x) for x in item]
                 case 1 if hasattr(item, "__dict__"):
-                    return item.__dict__
+                    return {
+                        str(key): defaults(value)
+                        for key, value in (item.__dict__ or {}).items()
+                    }
                 case _: return str(item)
 
         return dumps(
             self.to_dict(),
-            indent = indent,
+            indent = 4 if indent else 0,
             default = defaults,
             ensure_ascii = False,
         )
@@ -102,8 +115,8 @@ class Cursor:
         )
 
         columns = self.columns
-        rowcount = self.rowcount
         rows = [row for row in self.cursor] if columns else []
+        rowcount = self.rowcount
 
         self.close()
         return ResultSQL(rowcount, columns, rows)
@@ -115,8 +128,8 @@ class Cursor:
         )
 
         columns = self.columns
-        rowcount = self.rowcount
         rows = [row for row in self.cursor] if columns else []
+        rowcount = self.rowcount
 
         # cursor.nextset()
         if (nextset := getattr(self.cursor, "nextset", None)) and callable(nextset):
