@@ -9,3 +9,4 @@ from simple_sql_builder.connections import Connection, ResultSQL
 from simple_sql_builder.dml.insert import InsertMany, InsertOne
 from simple_sql_builder.dml.select import Select
 from simple_sql_builder.dml.update import Update
+from simple_sql_builder.dml.delete import Delete
