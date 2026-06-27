@@ -4,7 +4,7 @@ from json import dumps
 from decimal import Decimal
 from dataclasses import dataclass
 from datetime import datetime, date, time
-from typing import Protocol, Any, Self, Iterator
+from typing import Protocol, Any, Self, Iterator, Callable
 # internal
 from simple_sql_builder.parameters import *
 from simple_sql_builder.shared import SequenceAny, ManySequenceAny, MappingAny
@@ -35,30 +35,66 @@ class ResultSQL:
 
     rowcount: int
     """Affected lines"""
+    returned: int
+    """Rows originally returned
+    - Use `len(self)` for actual `rows` length"""
     columns: tuple[str, ...]
     """Columns names of `rows returned`"""
     rows: list[SequenceAny]
     """Sequence of values of `rows returned`"""
 
     def __bool__ (self) -> bool:
-        return bool(self.rowcount or self.returned)
+        return bool(self.rowcount or len(self))
 
     def __repr__ (self) -> str:
         return f"<ResultSQL rowcount={self.rowcount} returned={self.returned}>"
+
+    def __len__ (self) -> int:
+        return len(self.rows)
 
     def __iter__ (self) -> Iterator[MappingAny]:
         for row in self.rows:
             yield dict(zip(self.columns, row))
 
     @property
-    def returned (self) -> int:
-        """Rows returned"""
-        return len(self.rows)
-
-    @property
     def first (self) -> MappingAny:
         """First row returned or `{}` if empty"""
         return next(self.__iter__()) if self.rows else {}
+
+    def transform (self, **funcs: Callable[[Any], Any]) -> Self:
+        """Transform values of columns with custom function `column_name = (value) -> value`
+        - `result.transform(name = lambda value: str(value).upper())`"""
+        if not funcs:
+            return self
+
+        transforms = {}
+        for column, func in funcs.items():
+            if column not in self.columns:
+                raise ValueError(f"Column name {column!r} not present on ResultSQL.columns: {self.columns}")
+            index = self.columns.index(column)
+            transforms[index] = func
+
+        self.rows = [
+            tuple(
+                transforms[index](value)
+                if index in transforms
+                else value
+
+                for index, value in enumerate(row)
+            )
+            for row in self.rows
+        ]
+        return self
+
+    def filter (self, func: Callable[[MappingAny], bool]) -> Self:
+        """Filter `rows returned` with custom `func (line) -> bool`
+        - `result.filter(lambda line: line["id"] == 1)`"""
+        self.rows = [
+            row
+            for line, row in zip(self, self.rows)
+            if func(line)
+        ]
+        return self
 
     def to_dict (self) -> list[MappingAny]:
         """Transform `rows` and `columns` to `list[dict]`"""
@@ -119,7 +155,7 @@ class Cursor:
         rowcount = self.rowcount
 
         self.close()
-        return ResultSQL(rowcount, columns, rows)
+        return ResultSQL(rowcount, len(rows), columns, rows)
 
     def executemany (self, sql: str, params: ManySequenceAny, **kwargs) -> ResultSQL:
         self.cursor = (
@@ -138,7 +174,7 @@ class Cursor:
                 rows.extend(row for row in self.cursor)
 
         self.close()
-        return ResultSQL(rowcount, columns, rows)
+        return ResultSQL(rowcount, len(rows), columns, rows)
 
 class Connection (SupportParameter):
     """Wrapper to a driver Connection with support to `execute(statement)`
