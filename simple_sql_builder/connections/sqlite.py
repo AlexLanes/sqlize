@@ -3,26 +3,29 @@
 # std
 from typing import Any
 from os import PathLike
-from sqlite3 import connect, Connection as ConnectionSQLite
+from sqlite3 import (
+    connect as sqlite3_connect,
+    Connection as sqlite3_Connection
+)
 # internal
 from simple_sql_builder.shared import TableData, ColumnData
-from simple_sql_builder.connections import Connection
+from simple_sql_builder.connections import Connection as C
 
-class SQLite (Connection):
+class SQLite (C):
     """`Connection` for `SQLite` database using stdlib `sqlite3`
     - `SQLite(file_path)`
     - `SQLite.Memory()`"""
 
-    conn: ConnectionSQLite
+    conn: sqlite3_Connection
 
     def __init__ (self, file_path: str | PathLike[str] = "./database.sqlite", **kwargs: Any) -> None:
-        self.conn = connect(str(file_path), **kwargs)
+        self.conn = sqlite3_connect(str(file_path), **kwargs)
         self.set_parameter("?")
 
     @classmethod
     def Memory (cls, **kwargs: Any) -> "SQLite":
         connection = object.__new__(cls)
-        connection.conn = connect(":memory:", **kwargs)
+        connection.conn = sqlite3_connect(":memory:", **kwargs)
         return connection.set_parameter("?")
 
     def foreign_keys (self, enable: bool = True) -> "SQLite":

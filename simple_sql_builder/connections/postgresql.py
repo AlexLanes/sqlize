@@ -6,22 +6,25 @@ from typing import Any, override
 # internal
 from simple_sql_builder.shared import SequenceAny, TableData, ColumnData
 from simple_sql_builder.supports import ExecutableStatement
-from simple_sql_builder.connections import Connection, ResultSQL
+from simple_sql_builder.connections import Connection as C, ResultSQL
 # external
-try: from psycopg import connect, Connection as ConnectionPG
+try: from psycopg import (
+    connect as psycopg_connect,
+    Connection as psycopg_Connection
+)
 except ImportError:
-    raise TypeError("Optional dependency [postgresql] needed to use 'simple_sql_builder.connections.postgresql'")
+    raise ImportError("Optional dependency [postgresql] needed to use 'simple_sql_builder.connections.postgresql'")
 
-class PostgreSQL (Connection):
+class PostgreSQL (C):
     """`Connection` for `PostgreSQL` database using external `psycopg[binary]`
     - `PostgreSQL(dsn_or_url: str)`
     - `PostgreSQL.Connect(...)`"""
 
-    conn: ConnectionPG[SequenceAny]
+    conn: psycopg_Connection[SequenceAny]
 
     def __init__ (self, dsn_or_url: str, **kwargs: Any) -> None:
         kwargs = { "connect_timeout": 5, **kwargs }
-        self.conn = connect(dsn_or_url, **kwargs)
+        self.conn = psycopg_connect(dsn_or_url, **kwargs)
         self.set_parameter("%s")
 
     @classmethod
@@ -39,7 +42,7 @@ class PostgreSQL (Connection):
             if value is not None
                and key not in { "kwargs", "cls", "connection" }
         }
-        connection.conn = connect(**{ **params, **kwargs })
+        connection.conn = psycopg_connect(**{ **params, **kwargs })
         return connection.set_parameter("%s")
 
     @override
