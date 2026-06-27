@@ -81,7 +81,7 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
                 case AliasedExpression():
                     name = value.alias
-                    sql = to_sql(value.expression)
+                    sql = to_sql(value.expression, table_alias=False)
                     params.extend(sql)
                     parameterized = sql.join().format(*(positional.next() for _ in sql))
                     sets.append(f"{name} = {parameterized}")

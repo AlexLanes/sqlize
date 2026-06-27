@@ -96,7 +96,7 @@ class InsertOne (ExecutableStatement, SupportsReturning):
 
                 case AliasedExpression():
                     columns.append(value.alias)
-                    sql = to_sql(value.expression)
+                    sql = to_sql(value.expression, table_alias=False)
                     parameters = (positional.next() for _ in sql)
                     values.append(sql.join().format(*parameters))
                     params.extend(sql)
