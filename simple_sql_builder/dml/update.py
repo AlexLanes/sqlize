@@ -1,5 +1,4 @@
 # std
-from __future__ import annotations
 from typing import Self, override
 # internal
 from simple_sql_builder.shared import SequenceAny
