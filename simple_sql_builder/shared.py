@@ -1,5 +1,6 @@
 # std
 from __future__ import annotations
+from dataclasses import dataclass
 from typing import (
     Any, Self,
     Iterable, Sequence, Mapping,
@@ -20,6 +21,19 @@ def indent (sql: str) -> str:
         "    " + line
         for line in sql.split("\n")
     )
+
+@dataclass(kw_only=True)
+class TableData:
+    name: str
+    schema: str | None = None
+    is_view: bool
+
+@dataclass(kw_only=True)
+class ColumnData:
+    name: str
+    type: str
+    is_nullable: bool
+    has_default: bool
 
 class DataSQL:
     __slots__ = ("sqls", "params")
@@ -83,6 +97,8 @@ __all__ = [
     "quote",
     "indent",
     "DataSQL",
+    "TableData",
+    "ColumnData",
     "MappingAny",
     "SequenceAny",
     "ManySequenceAny",

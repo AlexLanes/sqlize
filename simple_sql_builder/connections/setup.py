@@ -128,7 +128,8 @@ class Cursor:
         return ResultSQL(rowcount, columns, rows)
 
 class Connection (SupportParameter):
-    """`IConnectionPEP249 => "DB API 2.0"` Wrapper to `transaction` `close` `Cursor`
+    """Wrapper to a driver Connection with support to `execute(statement)`
+    - `IConnectionPEP249 => "DB API 2.0"` Interface to `commit` `rollback` `close` `Cursor`
     - `Connection(conn)` closing should be handled
     - `with Connection(conn) as connection` are closed after `with`"""
 
@@ -138,11 +139,11 @@ class Connection (SupportParameter):
 
     def __repr__ (self) -> str:
         name = (
-            f"for {conn.__module__}.{conn.__class__.__name__}"
+            f"'{conn.__module__}.{conn.__class__.__name__}'"
             if (conn := getattr(self, "conn", False))
             else "closed"
         )
-        return f"<Connection {name!r}>"
+        return f"<Connection => {name}>"
 
     def __enter__ (self) -> Self:
         return self
@@ -164,7 +165,7 @@ class Connection (SupportParameter):
         return Cursor(self.conn.cursor())
 
     def execute (self, statement: ExecutableStatement, **kwargs) -> ResultSQL:
-        """Execute `Statement`
+        """Execute `SQL: Statement`
         - Type of `PositionalParameter` guessed on `init` by `conn` name
             - `set_parameter()` to manually set
         - `kwargs` additional params `execute()` or `executemany()` accepts"""

@@ -3,7 +3,7 @@ from simple_sql_builder.column     import A # AliasedColumn  Builder
 from simple_sql_builder.table      import T # Table + Column Builder
 
 # Connection
-from simple_sql_builder.connection import Connection
+from simple_sql_builder.connections import Connection, ResultSQL
 
 # DMLs
 from simple_sql_builder.insert import InsertMany, InsertOne

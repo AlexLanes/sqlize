@@ -65,15 +65,14 @@ name = "simple-sql-builder"
 version = "1"
 source = { editable = "." }
 
-[package.dev-dependencies]
-dev = [
+[package.optional-dependencies]
+postgresql = [
     { name = "psycopg", extra = ["binary"] },
 ]
 
 [package.metadata]
-
-[package.metadata.requires-dev]
-dev = [{ name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" }]
+requires-dist = [{ name = "psycopg", extras = ["binary"], marker = "extra == 'postgresql'", specifier = ">=3.3.4" }]
+provides-extras = ["postgresql"]
 
 [[package]]
 name = "typing-extensions"
