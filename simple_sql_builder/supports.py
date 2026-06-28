@@ -149,13 +149,13 @@ class SupportsPaging:
         return self
 
     def FetchFirstRowsOnly (self, value: int | None) -> Self:
-        """Apply `FETCH FRIST {value} ROWS ONLY`
+        """Apply `FETCH FIRST {value} ROWS ONLY`
         - `None` do nothing"""
         if value is None:
             return self
         if value <= 0:
             raise ValueError(f"{self.__class__.__name__}().FetchFirstRowsOnly({value}) should be >= 1")
-        self.data_paging.append((3, "FETCH FRIST {} ROWS ONLY", value))
+        self.data_paging.append((3, "FETCH FIRST {} ROWS ONLY", value))
         return self
 
 class SupportsReturning:
