@@ -3,6 +3,7 @@
 - `ResultSQL` return `@dataclass` of `cursor.execute()` and `cursor.executemany()`
 #### SQLite Connection `simple_sql_builder.connections.sqlite`
 #### ODBC Connection `simple_sql_builder.connections.odbc` optional dependency `[odbc]` needed
-#### PostgreSQL Connection `simple_sql_builder.connections.postgresql` optional dependency `[postgresql]` needed"""
+#### PostgreSQL Connection `simple_sql_builder.connections.postgresql` optional dependency `[postgresql]` needed
+#### MicrosoftSQL Connection `simple_sql_builder.connections.mssql` optional dependency `[mssql]` needed"""
 
 from simple_sql_builder.connections.setup import Connection, ResultSQL
