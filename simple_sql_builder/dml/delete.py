@@ -11,7 +11,7 @@ class Delete (ExecutableStatement, SupportsWhere, SupportsReturning):
 
     ## Example
     ```python
-    from simple_sql_builder import T, Delete
+    from simple_sql_builder import T, Delete, Connection
 
     a = T.actor
     delete = (
@@ -23,6 +23,8 @@ class Delete (ExecutableStatement, SupportsWhere, SupportsReturning):
 
     # Transform
     sql, params = delete.to_sql()
+    # Execute
+    Connection(...).execute(select)
     ```
     """
 

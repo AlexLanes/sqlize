@@ -132,7 +132,7 @@ class Select (Queryable, SupportsWhere):
 
     ## Example
     ```python
-    from simple_sql_builder import E, A, T, Select
+    from simple_sql_builder import E, A, T, Select, Connection
 
     # Select
     users = T.users
@@ -156,7 +156,6 @@ class Select (Queryable, SupportsWhere):
         .Offset(0)
         .Limit(100)
     )
-    sql, params = select.to_sql()
 
     # CTE + GROUPING
     a = T.actor
@@ -173,13 +172,18 @@ class Select (Queryable, SupportsWhere):
         .OrderBy(a.actor_id.ASC)
         .AsCte("cte_movies_count")
     )
-    statement = (
+    select = (
         Select(A.All())
         .From(cte)
         .OrderBy(cte.actor_id.ASC)
         .Limit(5)
         .Offset(0)
     )
+
+    # Transform
+    sql, params = select.to_sql()
+    # Execute
+    Connection(...).execute(select)
     ```
     """
 

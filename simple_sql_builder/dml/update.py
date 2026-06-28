@@ -12,7 +12,7 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
     ## Example
     ```python
-    from simple_sql_builder import E, A, T, Update
+    from simple_sql_builder import E, A, T, Update, Connection
 
     # Simple Values
     a = T.actor
@@ -43,6 +43,8 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
     # Transform
     sql, params = update.to_sql()
+    # Execute
+    Connection(...).execute(select)
     ```
     """
 

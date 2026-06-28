@@ -42,7 +42,7 @@ class InsertOne (ExecutableStatement, SupportsReturning):
 
     ## Example
     ```python
-    from simple_sql_builder import E, A, T, InsertOne
+    from simple_sql_builder import E, A, T, InsertOne, Connection
 
     actor = T.actor
     insert = (
@@ -64,6 +64,8 @@ class InsertOne (ExecutableStatement, SupportsReturning):
 
     # Transform
     sql, params = insert.to_sql()
+    # Execute
+    Connection(...).execute(select)
     ```
     """
 
@@ -146,7 +148,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
 
     ## Example
     ```python
-    from simple_sql_builder import T, InsertMany
+    from simple_sql_builder import T, InsertMany, Connection
 
     actor = T.actor
     insert = (
@@ -159,6 +161,8 @@ class InsertMany (ExecutableStatement, SupportsReturning):
 
     # Transform
     sql, params = insert.to_sql()
+    # Execute
+    Connection(...).execute(select)
     ```
     """
 
