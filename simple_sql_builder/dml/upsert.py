@@ -17,87 +17,88 @@ class Upsert (SupportsReturning, SupportParameter):
     actor = T.actor
     updated, result = (
         Upsert(actor, on=actor.actor_id == 1)
-        .WhenMatch(actor.first_name.Value("Bar"), actor.last_update.DEFAULT_VALUE)
-        .WhenNotMatch(actor.first_name.Value("Foo"), actor.last_name.Value("Bar"))
-        .Returning(A.All())
-        .execute(...)
+        .WhenMatched(actor.first_name.Value("Bar"), actor.last_update.DEFAULT_VALUE)
+        .WhenNotMatched(actor.first_name.Value("Foo"), actor.last_name.Value("Bar"))
+        .Returning(A.All()) # PostgreSQL, SQLite
+        .Output(T.inserted.All()) # SQL Server
+        .execute(Connection(...))
     )
     ```
     """
 
     table: Table
     data_on: Expression
-    data_match: list[ColumnWithValue | ColumnWithDefaultValue | AliasedExpression]
-    data_not_match: list[ColumnWithValue | ColumnWithDefaultValue]
+    data_matched: list[ColumnWithValue | ColumnWithDefaultValue | AliasedExpression]
+    data_not_matched: list[ColumnWithValue | ColumnWithDefaultValue]
 
     def __init__ (self, table: Table, *, on: Expression) -> None:
         super().__init__()
         self.table = table
         self.data_on = on
-        self.data_match = []
-        self.data_not_match = []
+        self.data_matched = []
+        self.data_not_matched = []
 
     def __repr__ (self) -> str:
         return f"<UPDATE or INSERT {self.table.to_table_name()!r}"
 
     def execute (self, conn: Connection, *, rollback_on_error=True) -> tuple[bool, ResultSQL]:
         """Use a `Connection` to execute `Update` or `Insert` Statement
-        - `WhenMatch` do `Update`
-        - `WhenNotMatch` do `Insert`
+        - `WhenMatched` do `Update`
+        - `WhenNotMatched` do `Insert`
         - Returns `(updated, ResultSQL)`"""
-        if not self.data_match:
-            raise ValueError("Upsert().WhenMatch() should be called first")
-        if not self.data_not_match:
-            raise ValueError("Upsert().WhenNotMatch() should be called first")
+        if not self.data_matched:
+            raise ValueError("Upsert().WhenMatched() should be called first")
+        if not self.data_not_matched:
+            raise ValueError("Upsert().WhenNotMatched() should be called first")
 
         # TRY UPDATE
         try:
-            update = Update(self.table).Set(*self.data_match).Where(self.data_on)
+            update = Update(self.table).Set(*self.data_matched).Where(self.data_on)
             update.data_returning = self.data_returning
+            update.data_output = self.data_output
             update.parameter = self.parameter
             result = conn.execute(update)
-            if result.rowcount == 1: return (True, result)
-            assert result.rowcount < 1, (
+            if 1 in (result.rowcount, result.returned): return (True, result)
+            assert not result, (
                 "Upsert().execute() resulted on more than 1 rowcount; "
                 "Upsert().On() should be more strict, like using a Primary Key"
             )
-        except AssertionError: raise
         except Exception:
             if rollback_on_error: conn.rollback()
             raise
 
         # TRY INSERT
         try:
-            insert = InsertOne(into=self.table).Values(*self.data_not_match)
+            insert = InsertOne(into=self.table).Values(*self.data_not_matched)
             insert.data_returning = self.data_returning
+            insert.data_output = self.data_output
             insert.parameter = self.parameter
             result = conn.execute(insert)
-            assert result.rowcount == 1, (
+            assert 1 in (result.rowcount, result.returned), (
                 "Upsert().execute() did not match any row to update "
                 "and failed to insert a new row"
             )
             return (False, result)
-        except AssertionError: raise
         except Exception:
             if rollback_on_error: conn.rollback()
             raise
 
-    def WhenMatch (self, *to_update: ColumnWithValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
-        """Values to `Update`  
-        `.WhenMatch(T.users.name.Value("Foo"), T.users.last_update.DEFAULT_VALUE)`"""
+    def WhenMatched (self, *to_update: ColumnWithValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
+        """Values to `Update` if matched  
+        `.WhenMatched(T.users.name.Value("Foo"), T.users.last_update.DEFAULT_VALUE)`"""
         if not to_update:
-            raise ValueError("At least one value is required on Upsert().WhenMatch()")
+            raise ValueError("At least one value is required on Upsert().WhenMatched()")
 
-        self.data_match.extend(to_update)
+        self.data_matched.extend(to_update)
         return self
 
-    def WhenNotMatch (self, *to_insert: ColumnWithValue | ColumnWithDefaultValue) -> Self:
-        """Values to `Insert`  
-        `.WhenNotMatch(T.users.name.Value("Foo"), T.users.last_update.DEFAULT_VALUE)`"""
+    def WhenNotMatched (self, *to_insert: ColumnWithValue | ColumnWithDefaultValue) -> Self:
+        """Values to `Insert` if not matched  
+        `.WhenNotMatched(T.users.name.Value("Foo"), T.users.last_update.DEFAULT_VALUE)`"""
         if not to_insert:
-            raise ValueError("At least one value is required on Upsert().WhenNotMatch()")
+            raise ValueError("At least one value is required on Upsert().WhenNotMatched()")
 
-        self.data_not_match.extend(to_insert)
+        self.data_not_matched.extend(to_insert)
         return self
 
 __all__ = ["Upsert"]

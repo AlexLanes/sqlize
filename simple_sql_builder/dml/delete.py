@@ -17,7 +17,8 @@ class Delete (ExecutableStatement, SupportsWhere, SupportsReturning):
     delete = (
         Delete(a, allow_empty_where=False)
         .Where(a.actor_id == 11)
-        .Returning(a.All())
+        .Returning(a.All()) # PostgreSQL, SQLite
+        .Output(T.deleted.All()) # SQL Server
     )
 
     # Transform
@@ -45,11 +46,11 @@ class Delete (ExecutableStatement, SupportsWhere, SupportsReturning):
         positional = self.parameter()
         parts = [f"DELETE FROM {self.table.to_table_name()}"]
 
-        for wr in (self.data_where, self.data_returning):
-            if wr is None: continue
-            parameterized = (positional.next() for _ in wr)
-            parts.append(wr.join().format(*parameterized))
-            params.extend(wr)
+        for data in (self.data_output, self.data_where, self.data_returning):
+            if data is None: continue
+            parameterized = (positional.next() for _ in data)
+            parts.append(data.join().format(*parameterized))
+            params.extend(data)
 
         return "\n".join(parts), params
 

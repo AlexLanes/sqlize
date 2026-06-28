@@ -21,10 +21,14 @@ class InsertDefaultValues (ExecutableStatement, SupportsReturning):
     @override
     def to_sql (self) -> tuple[str, SequenceAny]:
         positional = self.parameter()
-        params, sqls = [], [
-            f"INSERT INTO {self.into.to_table_name()}",
-            "DEFAULT VALUES"
-        ]
+        params, sqls = [], [f"INSERT INTO {self.into.to_table_name()}"]
+
+        if self.data_output is not None:
+            parameters = (positional.next() for _ in self.data_output)
+            sqls.append(self.data_output.join().format(*parameters))
+            params.extend(self.data_output)
+
+        sqls.append("DEFAULT VALUES")
 
         if self.data_returning is not None:
             parameters = (positional.next() for _ in self.data_returning)
@@ -38,6 +42,8 @@ class InsertOne (ExecutableStatement, SupportsReturning):
 
     ## Example
     ```python
+    from simple_sql_builder import E, A, T, InsertOne
+
     actor = T.actor
     insert = (
         InsertOne(into=actor)
@@ -47,15 +53,16 @@ class InsertOne (ExecutableStatement, SupportsReturning):
             E.Value(" Lanes ").Trim().As("last_name"),
             E.CURRENT_TIMESTAMP.As("last_update")
         )
-        .Returning(actor.All())
+        .Returning(actor.All()) # PostgreSQL, SQLite
+        .Output(T.inserted.All()) # SQL Server
     )
-    sql, params = insert.to_sql()
-
     insert = (
         InsertOne(into=actor)
         .DefaultValues()
-        .Returning(actor.All())
+        .Returning(A.All())
     )
+
+    # Transform
     sql, params = insert.to_sql()
     ```
     """
@@ -73,8 +80,6 @@ class InsertOne (ExecutableStatement, SupportsReturning):
 
     @override
     def to_sql (self) -> tuple[str, SequenceAny]:
-        """Positional Parameterized `SQL: INSERT INTO {table} ({ columns }) VALUES ({ values }) [RETURNING {columns}]` version
-        - As `(sql, params)`"""
         if not self.data_values:
             raise ValueError("InsertOne().Values() should be called first")
 
@@ -100,13 +105,19 @@ class InsertOne (ExecutableStatement, SupportsReturning):
                     values.append(sql.join().format(*parameters))
                     params.extend(sql)
 
-                case _: raise TypeError(f"Invalid value found on InsertOne.Values({value!r})")
+                case _: raise TypeError(f"Invalid value found on InsertOne().Values({value!r})")
 
         parts = [
             f"INSERT INTO {self.into.to_table_name()}",
             f"({ ", ".join(columns) })",
-            f"VALUES ({ ", ".join(values) })",
         ]
+
+        if self.data_output is not None:
+            parameters = (positional.next() for _ in self.data_output)
+            parts.append(self.data_output.join().format(*parameters))
+            params.extend(self.data_output)
+
+        parts.append(f"VALUES ({ ", ".join(values) })")
 
         if self.data_returning is not None:
             parameters = (positional.next() for _ in self.data_returning)
@@ -135,13 +146,18 @@ class InsertMany (ExecutableStatement, SupportsReturning):
 
     ## Example
     ```python
+    from simple_sql_builder import T, InsertMany
+
     actor = T.actor
     insert = (
         InsertMany(into=actor)
         .Values(actor.first_name.Value("Alex"), actor.last_name.Value("Lanes"))
         .Values(actor.last_name.Value("Foo"), actor.first_name.Value("Bar"))
-        .Returning(actor.All())
+        .Returning(actor.All()) # PostgreSQL, SQLite
+        .Output(T.inserted.All()) # SQL Server
     )
+
+    # Transform
     sql, params = insert.to_sql()
     ```
     """
@@ -159,20 +175,24 @@ class InsertMany (ExecutableStatement, SupportsReturning):
 
     @override
     def to_sql (self) -> tuple[str, ManySequenceAny]:
-        """Positional Parameterized `SQL: INSERT INTO {table} ({ columns }) VALUES ({ values }) [RETURNING {columns}]` version
-        - As `(sql, params)`"""
         if not self.data_values:
             raise ValueError("InsertMany().Values() should be called first")
 
+        params = []
         first = self.data_values[0]
         positional = self.parameter()
         parts = [
             f"INSERT INTO {self.into.to_table_name()}",
             f"({ ", ".join(v.column.name for v in first) })",
-            f"VALUES ({ ", ".join(positional.next() for _ in first) })",
         ]
 
-        params = []
+        if self.data_output is not None:
+            parameters = (positional.next() for _ in self.data_output)
+            parts.append(self.data_output.join().format(*parameters))
+            params.extend(self.data_output)
+
+        parts.append(f"VALUES ({ ", ".join(positional.next() for _ in first) })")
+
         if self.data_returning is not None:
             parameters = (positional.next() for _ in self.data_returning)
             parts.append(self.data_returning.join().format(*parameters))

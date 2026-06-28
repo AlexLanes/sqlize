@@ -161,14 +161,17 @@ class SupportsPaging:
 class SupportsReturning:
 
     data_returning: DataSQL | None
+    data_output: DataSQL | None
 
     def __init__ (self) -> None:
         super().__init__()
-        self.data_returning = None
+        self.data_returning = self.data_output = None
 
     def Returning (self, *value: Column | AliasedColumn | AliasedExpression) -> Self:
         """Apply `RETURNING {Columns}`  
         `.Returning(A.All())`  
+        `.Returning(T.users.All())`  
+        `.Returning(T.old.name.As("old_name"), T.new.name.As("new_name"))`  
         `.Returning(T.users.id, A.name, A.first_name.Concat(A.last_name).As("full_name"))`"""
         if not value:
             return self
@@ -181,6 +184,26 @@ class SupportsReturning:
 
         self.data_returning = DataSQL(
             "RETURNING " + ", ".join(sqls),
+            params
+        )
+
+        return self
+
+    def Output (self, *value: Column | AliasedExpression) -> Self:
+        """Apply `OUTPUT {Columns}`  
+        `.Output(T.inserted.All())`  
+        `.Output(T.deleted.name.As("old_name"), T.inserted.name.As("new_name"))`"""
+        if not value:
+            return self
+
+        sqls, params = [], []
+        for column in value:
+            sql = column.to_sql(table_alias=False)
+            sqls.append(sql.join())
+            params.extend(sql)
+
+        self.data_output = DataSQL(
+            "OUTPUT " + ", ".join(sqls),
             params
         )
 

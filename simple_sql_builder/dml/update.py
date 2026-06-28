@@ -20,7 +20,8 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
         Update(a)
         .Set(a.first_name.Value("Bar"), a.last_name.Value("Foo"))
         .Where(a.actor_id == 1)
-        .Returning(a.All())
+        .Returning(a.All()) # PostgreSQL, SQLite
+        .Output(T.inserted.All()) # SQL Server
     )
 
     # Default + Expression
@@ -94,11 +95,11 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
             ",\n".join(sets),
         ]
 
-        for wr in (self.data_where, self.data_returning):
-            if wr is None: continue
-            parameterized = (positional.next() for _ in wr)
-            parts.append(wr.join().format(*parameterized))
-            params.extend(wr)
+        for data in (self.data_output, self.data_where, self.data_returning):
+            if data is None: continue
+            parameterized = (positional.next() for _ in data)
+            parts.append(data.join().format(*parameterized))
+            params.extend(data)
 
         return "\n".join(parts), params
 
