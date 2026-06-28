@@ -106,7 +106,7 @@ class SupportsPaging:
         for _, sql, value in sorted(self.data_paging, key=lambda x: x[0]):
             sqls.append(sql)
             params.append(value)
-        return DataSQL.from_parts(sqls, params)
+        return DataSQL("\n".join(sqls), params)
 
     def Limit (self, value: int | None) -> Self:
         """Apply `LIMIT {value}`
