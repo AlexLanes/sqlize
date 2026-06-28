@@ -4,10 +4,12 @@ from typing import Any, Literal, override
 # internal
 from simple_sql_builder.shared import quote, DataSQL
 from simple_sql_builder.expression import (
-    Expression, E,
+    Expression,
     LiteralExpression, ConstantExpression,
     OrderableExpression, AliasedExpression
 )
+
+ESPECIAL_TABLES = {"old", "new", "inserted", "deleted"}
 
 class OrderableColumn (OrderableExpression):
 
@@ -97,7 +99,7 @@ class Column (Expression):
         """`SQL: table_alias.name` version"""
         return DataSQL(
             f"{self.ta}.{self.name}"
-            if table_alias
+            if table_alias or self.ta.lower() in ESPECIAL_TABLES
             else self.name,
             []
         )

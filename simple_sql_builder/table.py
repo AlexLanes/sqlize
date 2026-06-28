@@ -4,7 +4,7 @@ import itertools, string
 from typing import Generator
 from dataclasses import dataclass
 # internal
-from simple_sql_builder.column import Column
+from simple_sql_builder.column import Column, ESPECIAL_TABLES
 
 def gen () -> Generator[str, None, None]:
     c_cycle = itertools.cycle(string.ascii_lowercase)
@@ -31,7 +31,11 @@ class Table:
     _td_: TableData
 
     def __init__ (self, name: str, schema: str | None) -> None:
-        self._td_ = TableData(name, next(table_alias_generator), schema)
+        self._td_ = (
+            TableData(name, next(table_alias_generator), schema)
+            if name.lower() not in ESPECIAL_TABLES
+            else TableData(name, name, schema)
+        )
         if schema not in TABLE_CACHE:
             TABLE_CACHE[schema] = {}
         TABLE_CACHE[schema][name] = self
