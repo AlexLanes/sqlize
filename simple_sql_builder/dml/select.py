@@ -183,7 +183,8 @@ class Select (Queryable, SupportsWhere):
     ```
     """
 
-    distinct: bool
+    data_distinct: bool
+    data_top: int | None
     table: Table | CteTable | None
     data_columns: list[Column | AliasedExpression]
     data_joins: list[tuple[
@@ -199,13 +200,14 @@ class Select (Queryable, SupportsWhere):
         if not columns:
             raise ValueError("No columns informed on Select(). Consider using Select(T.table.All())")
 
-        self.distinct = False
+        self.data_top = None
+        self.data_distinct = False
         self.data_columns = list(columns)
         self.data_joins = []
         self.table = self.data_groupby = self.data_having = None
 
     def __repr__ (self) -> str:
-        d = " DISTINCT " if self.distinct else " "
+        d = " DISTINCT " if self.data_distinct else " "
         return (
             f"<SELECT{d}FROM {self.table.to_table_sql()}>"
             if self.table else 
@@ -237,12 +239,19 @@ class Select (Queryable, SupportsWhere):
                 else sql
             )
 
-        # SELECT FROM
+        # SELECT DISTINCT TOP
+        select_parts = ["SELECT"]
+        if self.data_distinct: select_parts.append("DISTINCT")
+        if top := self.data_top:
+            all_params.append(top)
+            select_parts.append(sql_format("TOP ({})", [top]))
+
+        # COLUMNS FROM
         data = DataSQL.merge(x.to_sql() for x in self.data_columns)
         all_params.extend(data)
-        sql = sql_format(data.join(", "), data)
+        select_parts.append(sql_format(data.join(", "), data))
         sql_parts = [
-            f"SELECT{ " DISTINCT" if self.distinct else "" } {sql}",
+            " ".join(select_parts),
             f"FROM { self.table.to_table_sql() }"
         ]
 
@@ -287,7 +296,17 @@ class Select (Queryable, SupportsWhere):
 
     def Distinct (self) -> Self:
         """Apply `SELECT DISTINCT`"""
-        self.distinct = True
+        self.data_distinct = True
+        return self
+
+    def Top (self, rows: int | None) -> Self:
+        """Apply `TOP {rows}`
+        - `None` do nothing"""
+        if rows is None:
+            return self
+        if rows <= 0:
+            raise ValueError(f"Select().Top({ rows }) should be >= 1")
+        self.data_top = rows
         return self
 
     def From (self, table: Table | CteTable) -> Self:
