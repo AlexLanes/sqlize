@@ -36,13 +36,19 @@ class PostgreSQL (C):
                          connect_timeout: int | None = 5,
                          **kwargs: Any) -> "PostgreSQL":
         connection = object.__new__(cls)
-        params = {
+        connection.conn = psycopg_connect(**{
             key: value
-            for key, value in locals().items()
+            for key, value in {
+                "host": host,
+                "port": port,
+                "user": user,
+                "password": password,
+                "dbname": dbname,
+                "connect_timeout": connect_timeout,
+                **kwargs
+            }.items()
             if value is not None
-               and key not in { "kwargs", "cls", "connection" }
-        }
-        connection.conn = psycopg_connect(**{ **params, **kwargs })
+        })
         return connection.set_parameter("%s")
 
     @override
