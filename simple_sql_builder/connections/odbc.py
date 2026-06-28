@@ -62,15 +62,15 @@ class ConnectionODBC (C):
         driver="{ODBC Driver 18 for SQL Server}",
         server="localhost",
         database="master",
-        uid="sa",
-        pwd="password",
-        trusted_server_certificate="yes",
+        user="sa",
+        password="password",
+        TrustServerCertificate="yes",
     )
     ConnectionODBC.Connect(
         driver="PostgreSQL Unicode(x64)",
         server="localhost",
-        uid="postgres",
-        pwd="admin",
+        user="postgres",
+        password="admin",
         database="postgres",
     )
     ```
@@ -89,11 +89,8 @@ class ConnectionODBC (C):
                       encoding = "utf-16le",
                       server: str | None = None,
                       database: str | None = None,
-                      uid: str | None = None,
-                      pwd: str | None = None,
-                      encrypt: str | None = None,
-                      trusted_connection: str | None = None,
-                      trusted_server_certificate: str | None = None,
+                      user: str | None = None,
+                      password: str | None = None,
                       **kwargs: Any) -> "ConnectionODBC":
         connection = object.__new__(cls)
         connection_string = ";".join(
@@ -102,11 +99,8 @@ class ConnectionODBC (C):
                 "driver": driver,
                 "server": server,
                 "database": database,
-                "uid": uid,
-                "pwd": pwd,
-                "encrypt": encrypt,
-                "Trusted_Connection": trusted_connection,
-                "TrustServerCertificate": trusted_server_certificate,
+                "uid": user,
+                "pwd": password,
                 **kwargs
             }.items()
             if value is not None
