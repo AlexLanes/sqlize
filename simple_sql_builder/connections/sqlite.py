@@ -4,8 +4,8 @@
 from typing import Any
 from os import PathLike
 from sqlite3 import (
-    connect as sqlite3_connect,
-    Connection as sqlite3_Connection
+    connect as sq3_connect,
+    Connection as sq3_Connection
 )
 # internal
 from simple_sql_builder.shared import TableData, ColumnData
@@ -16,16 +16,16 @@ class SQLite (C):
     - `SQLite(file_path)`
     - `SQLite.Memory()`"""
 
-    conn: sqlite3_Connection
+    conn: sq3_Connection
 
     def __init__ (self, file_path: str | PathLike[str] = "./database.sqlite", **kwargs: Any) -> None:
-        self.conn = sqlite3_connect(str(file_path), **kwargs)
+        self.conn = sq3_connect(str(file_path), **kwargs)
         self.set_parameter("?")
 
     @classmethod
     def Memory (cls, **kwargs: Any) -> "SQLite":
         connection = object.__new__(cls)
-        connection.conn = sqlite3_connect(":memory:", **kwargs)
+        connection.conn = sq3_connect(":memory:", **kwargs)
         return connection.set_parameter("?")
 
     def foreign_keys (self, enable: bool = True) -> "SQLite":
