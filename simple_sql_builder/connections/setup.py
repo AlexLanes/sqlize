@@ -119,7 +119,7 @@ class ResultSQL:
 
         return dumps(
             self.to_dict(),
-            indent = 4 if indent else 0,
+            indent = 4 if indent else None,
             default = defaults,
             ensure_ascii = False,
         )
