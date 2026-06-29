@@ -71,6 +71,8 @@ class ColumnEqualsValue (BinaryExpression):
     right: Any
 
     def __init__ (self, left: Column, operator: str, right: Any) -> None:
+        if isinstance(right, Expression):
+            raise ValueError("ColumnEqualsValue expects Literal Values, not Expression")
         super().__init__(left, operator, right)
 
 class ColumnWithDefaultValue (ConstantExpression):
