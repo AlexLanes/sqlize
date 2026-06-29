@@ -34,7 +34,8 @@ class ResultSQL:
     - `for line in result: ...`"""
 
     rowcount: int
-    """Affected lines"""
+    """Affected lines
+    - Can vary because of database driver"""
     returned: int
     """Rows originally returned
     - Use `len(self)` for actual `rows` length"""
