@@ -39,11 +39,10 @@ class SupportsWhere:
 
     def Where (self, expression: Expression) -> Self:
         """Apply `WHERE {expression}`
-        #### A `Column` is a `Expression`
+        #### A `Column` can build `Expression`
         #### See `E` docstring for more info
-        <br>
 
-        ### Examples
+        # Examples
         `users = T.users`  
         `Where(users.id == 1)`  
         `Where( (users.id % 2 == 0) )`  
