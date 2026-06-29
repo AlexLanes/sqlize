@@ -1,11 +1,10 @@
 # std
 from __future__ import annotations
-from typing import Any, Literal, override
+from typing import Any, Literal, override, overload
 # internal
 from simple_sql_builder.shared import quote, DataSQL
 from simple_sql_builder.expression import (
-    Expression,
-    LiteralExpression, ConstantExpression,
+    Expression, BinaryExpression, ConstantExpression,
     OrderableExpression, AliasedExpression
 )
 
@@ -19,7 +18,7 @@ class OrderableColumn (OrderableExpression):
         super().__init__(order, self)
         self.column = column
 
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True) -> DataSQL:
         """`SQL: (alias|ta.name) ASC|DESC [NULLS FIRST|LAST]` version"""
         name = (
             self.column.alias
@@ -66,13 +65,13 @@ class AliasedColumn (AliasedExpression):
         """Apply `{alias} DESC` for `Select.Orderby`"""
         return OrderableColumn("DESC", self)
 
-class ColumnWithValue (LiteralExpression):
+class ColumnEqualsValue (BinaryExpression):
 
-    column: Column
+    left: Column
+    right: Any
 
-    def __init__ (self, value: Any, column: Column) -> None:
-        super().__init__(value)
-        self.column = column
+    def __init__ (self, left: Column, operator: str, right: Any) -> None:
+        super().__init__(left, operator, right)
 
 class ColumnWithDefaultValue (ConstantExpression):
 
@@ -108,15 +107,15 @@ class Column (Expression):
         """Apply `able_alias.name AS alias`"""
         return AliasedColumn(self, alias)
 
+    @overload
+    def __eq__ (self, other: Expression) -> BinaryExpression: ... # type: ignore
+    @overload
+    def __eq__ (self, other: object) -> ColumnEqualsValue: ...
     @override
-    def Value (self, value: Any) -> ColumnWithValue:
-        """Create a `Value` for the `Column`"""
-        if isinstance(value, Expression):
-            raise TypeError(
-                "Column.Value(value) should be a Literal Value not an Expression. "
-                "Consider using (Expression).As(alias)"
-            )
-        return ColumnWithValue(value, self)
+    def __eq__ (self, other: Expression | Any) -> BinaryExpression | ColumnEqualsValue:
+        operator = "IS" if other is None else "="
+        cls = BinaryExpression if isinstance(other, Expression) else ColumnEqualsValue
+        return cls(self, operator, other)
 
     @property
     def DEFAULT_VALUE (self) -> ColumnWithDefaultValue:

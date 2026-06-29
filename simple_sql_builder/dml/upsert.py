@@ -2,7 +2,7 @@
 from typing import Self
 # internal
 from simple_sql_builder.expression import Expression
-from simple_sql_builder.column import ColumnWithValue, ColumnWithDefaultValue, AliasedExpression
+from simple_sql_builder.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpression
 from simple_sql_builder.table import Table
 from simple_sql_builder.supports import SupportsReturning, SupportParameter
 from simple_sql_builder import Update, InsertOne, Connection, ResultSQL
@@ -17,8 +17,8 @@ class Upsert (SupportsReturning, SupportParameter):
     actor = T.actor
     updated, result = (
         Upsert(actor, on=actor.actor_id == 1)
-        .WhenMatched(actor.first_name.Value("Bar"), actor.last_update.DEFAULT_VALUE)
-        .WhenNotMatched(actor.first_name.Value("Foo"), actor.last_name.Value("Bar"))
+        .WhenMatched(actor.first_name == "Bar", actor.last_update.DEFAULT_VALUE)
+        .WhenNotMatched(actor.first_name == "Foo", actor.last_name == "Bar")
         .Returning(A.All()) # PostgreSQL, SQLite
         .Output(T.inserted.All()) # SQL Server
         .execute(Connection(...))
@@ -28,8 +28,8 @@ class Upsert (SupportsReturning, SupportParameter):
 
     table: Table
     data_on: Expression
-    data_matched: list[ColumnWithValue | ColumnWithDefaultValue | AliasedExpression]
-    data_not_matched: list[ColumnWithValue | ColumnWithDefaultValue]
+    data_matched: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
+    data_not_matched: list[ColumnEqualsValue | ColumnWithDefaultValue]
 
     def __init__ (self, table: Table, *, on: Expression) -> None:
         super().__init__()
@@ -75,26 +75,26 @@ class Upsert (SupportsReturning, SupportParameter):
             insert.parameter = self.parameter
             result = conn.execute(insert)
             assert 1 in (result.rowcount, result.returned), (
-                "Upsert().execute() did not match any row to update "
-                "and failed to insert a new row"
+                "Upsert().execute() did not match any row to Update "
+                "and failed to Insert a new row"
             )
             return (False, result)
         except Exception:
             if rollback_on_error: conn.rollback()
             raise
 
-    def WhenMatched (self, *to_update: ColumnWithValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
+    def WhenMatched (self, *to_update: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
         """Values to `Update` if matched  
-        `.WhenMatched(T.users.name.Value("Foo"), T.users.last_update.DEFAULT_VALUE)`"""
+        `.WhenMatched(T.users.name == "Foo", T.users.last_update.DEFAULT_VALUE)`"""
         if not to_update:
             raise ValueError("At least one value is required on Upsert().WhenMatched()")
 
         self.data_matched.extend(to_update)
         return self
 
-    def WhenNotMatched (self, *to_insert: ColumnWithValue | ColumnWithDefaultValue) -> Self:
+    def WhenNotMatched (self, *to_insert: ColumnEqualsValue | ColumnWithDefaultValue) -> Self:
         """Values to `Insert` if not matched  
-        `.WhenNotMatched(T.users.name.Value("Foo"), T.users.last_update.DEFAULT_VALUE)`"""
+        `.WhenNotMatched(T.users.name == "Foo", T.users.last_update.DEFAULT_VALUE)`"""
         if not to_insert:
             raise ValueError("At least one value is required on Upsert().WhenNotMatched()")
 

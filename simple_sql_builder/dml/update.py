@@ -3,7 +3,7 @@ from typing import Self, override
 # internal
 from simple_sql_builder.shared import SequenceAny
 from simple_sql_builder.expression import Expression, to_sql
-from simple_sql_builder.column import ColumnWithValue, ColumnWithDefaultValue, AliasedExpression
+from simple_sql_builder.column import ColumnWithDefaultValue, AliasedExpression, ColumnEqualsValue
 from simple_sql_builder.table import Table
 from simple_sql_builder.supports import ExecutableStatement, SupportsReturning, SupportsWhere
 
@@ -18,7 +18,7 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     a = T.actor
     update = (
         Update(a)
-        .Set(a.first_name.Value("Bar"), a.last_name.Value("Foo"))
+        .Set(a.first_name == "Foo", a.last_name == "Bar")
         .Where(a.actor_id == 1)
         .Returning(a.All()) # PostgreSQL, SQLite
         .Output(T.inserted.All()) # SQL Server
@@ -29,8 +29,8 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
         Update(a)
         .Set(
             a.actor_id.DEFAULT_VALUE,
-            a.first_name.Value("Bar"),
-            a.last_name.Value("Foo"),
+            a.first_name == "Foo",
+            a.last_name == "Bar",
             E.CURRENT_TIMESTAMP.As("last_update")
         )
         .Where(a.actor_id == None)
@@ -50,7 +50,7 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
     table: Table
     allow_empty_where: bool
-    data_set: list[ColumnWithValue | ColumnWithDefaultValue | AliasedExpression]
+    data_set: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
 
     def __init__ (self, table: Table, *, allow_empty_where=False) -> None:
         super().__init__()
@@ -74,10 +74,10 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
         for value in self.data_set:
             match value:
 
-                case ColumnWithValue():
-                    name = value.column.name
+                case ColumnEqualsValue():
+                    name = value.left.name
                     sets.append(f"{name} = {positional.next()}")
-                    params.extend(value.params)
+                    params.append(value.right)
 
                 case ColumnWithDefaultValue():
                     name = value.column.name
@@ -105,9 +105,9 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
         return "\n".join(parts), params
 
-    def Set (self, *value: ColumnWithValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
+    def Set (self, *value: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
         """Apply `SET {column} = {value}, ...`  
-        `.Set(T.users.id.DEFAULT_VALUE, T.users.name.Value("Bar"))`"""
+        `.Set(T.users.name == "Foo", T.users.id.DEFAULT_VALUE)`"""
         if not value:
             raise ValueError("At least one value is required on Update().Set()")
 

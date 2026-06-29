@@ -3,7 +3,7 @@ from typing import Self, override
 # internal
 from simple_sql_builder.shared import ManySequenceAny, SequenceAny
 from simple_sql_builder.expression import AliasedExpression, to_sql
-from simple_sql_builder.column import ColumnWithValue, ColumnWithDefaultValue
+from simple_sql_builder.column import ColumnWithDefaultValue, ColumnEqualsValue
 from simple_sql_builder.table import Table
 from simple_sql_builder.supports import SupportsReturning, ExecutableStatement
 
@@ -49,8 +49,8 @@ class InsertOne (ExecutableStatement, SupportsReturning):
         InsertOne(into=actor)
         .Values(
             actor.actor_id.DEFAULT_VALUE,
-            actor.first_name.Value("Alex"),
-            E.Value(" Lanes ").Trim().As("last_name"),
+            actor.first_name == "Alex",
+            actor.last_name == "Lanes",
             E.CURRENT_TIMESTAMP.As("last_update")
         )
         .Returning(actor.All()) # PostgreSQL, SQLite
@@ -70,7 +70,7 @@ class InsertOne (ExecutableStatement, SupportsReturning):
     """
 
     into: Table
-    data_values: list[ColumnWithValue | ColumnWithDefaultValue | AliasedExpression]
+    data_values: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
 
     def __init__ (self, into: Table) -> None:
         super().__init__()
@@ -91,10 +91,10 @@ class InsertOne (ExecutableStatement, SupportsReturning):
         for value in self.data_values:
             match value:
 
-                case ColumnWithValue():
-                    columns.append(value.column.name)
+                case ColumnEqualsValue():
+                    columns.append(value.left.name)
                     values.append(positional.next())
-                    params.extend(value.params)
+                    params.append(value.right)
 
                 case ColumnWithDefaultValue():
                     columns.append(value.column.name)
@@ -128,9 +128,9 @@ class InsertOne (ExecutableStatement, SupportsReturning):
 
         return "\n".join(parts), params
 
-    def Values (self, *values: ColumnWithValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
+    def Values (self, *values: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
         """Apply `VALUES ({ values })`  
-        `.Values(T.users.id.DEFAULT_VALUE, T.users.name.Value("Bar"), E.CURRENT_TIMESTAMP.As("last_update"))`"""
+        `.Values(T.users.id.DEFAULT_VALUE, T.users.name == "Foo", E.CURRENT_TIMESTAMP.As("last_update"))`"""
         if not values:
             raise ValueError("At least one value is required on InsertOne().Values()")
         if self.data_values:
@@ -153,8 +153,8 @@ class InsertMany (ExecutableStatement, SupportsReturning):
     actor = T.actor
     insert = (
         InsertMany(into=actor)
-        .Values(actor.first_name.Value("Alex"), actor.last_name.Value("Lanes"))
-        .Values(actor.last_name.Value("Foo"), actor.first_name.Value("Bar"))
+        .Values(actor.first_name == "Alex", actor.last_name =="Lanes")
+        .Values(actor.last_name == "Foo", actor.first_name == "Bar")
         .Returning(actor.All()) # PostgreSQL, SQLite
         .Output(T.inserted.All()) # SQL Server
     )
@@ -167,7 +167,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
     """
 
     into: Table
-    data_values: list[list[ColumnWithValue]]
+    data_values: list[list[ColumnEqualsValue]]
 
     def __init__ (self, into: Table) -> None:
         super().__init__()
@@ -187,7 +187,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
         positional = self.parameter()
         parts = [
             f"INSERT INTO {self.into.to_table_name()}",
-            f"({ ", ".join(v.column.name for v in first) })",
+            f"({ ", ".join(v.left.name for v in first) })",
         ]
 
         if self.data_output is not None:
@@ -214,15 +214,15 @@ class InsertMany (ExecutableStatement, SupportsReturning):
             ]
         )
 
-    def Values (self, *value: ColumnWithValue) -> Self:
+    def Values (self, *value: ColumnEqualsValue) -> Self:
         """Apply `VALUES ({ values })`  
-        `.Values(T.users.id.Value(1), T.users.name.Value("Bar"))`  
-        `.Values(T.users.name.Value("Foo"), T.users.id.Value(2))`"""
+        `.Values(T.users.id == 1, T.users.name == "Bar")`  
+        `.Values(T.users.name == "Foo", T.users.id == 2)`"""
         if not value:
             raise ValueError("At least one value is required on InsertMany().Values()")
 
-        ordered = sorted(value, key=lambda v: v.column.name)
-        columns = [c.column.name for c in ordered]
+        ordered = sorted(value, key=lambda c: c.left.name)
+        columns = [c.left.name for c in ordered]
 
         match self.data_values:
             case []:
@@ -232,7 +232,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
                     )
 
             case [first, *_]:
-                expected = [v.column.name for v in first]
+                expected = [v.left.name for v in first]
                 if expected != columns:
                     raise ValueError(
                         "All InsertMany().Values() rows must have the same columns names;"
