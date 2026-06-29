@@ -7,6 +7,7 @@ from typing import (
     overload
 )
 
+type SQLValue = object
 type SequenceAny = Sequence[Any]
 type MappingAny = Mapping[str, Any]
 type ManySequenceAny = Sequence[SequenceAny]
@@ -97,6 +98,7 @@ __all__ = [
     "quote",
     "indent",
     "DataSQL",
+    "SQLValue",
     "TableData",
     "ColumnData",
     "MappingAny",

@@ -1,7 +1,7 @@
 # std
 from typing import Self, override
 # internal
-from simple_sql_builder.shared import SequenceAny
+from simple_sql_builder.shared import SequenceAny, SQLValue
 from simple_sql_builder.expression import Expression, to_sql
 from simple_sql_builder.column import ColumnWithDefaultValue, AliasedExpression, ColumnEqualsValue
 from simple_sql_builder.table import Table
@@ -18,7 +18,7 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     a = T.actor
     update = (
         Update(a)
-        .Set(a.first_name == "Foo", a.last_name == "Bar")
+        .Set(a.first_name == "Foo", last_name="Bar")
         .Where(a.actor_id == 1)
         .Returning(a.All()) # PostgreSQL, SQLite
         .Output(T.inserted.All()) # SQL Server
@@ -52,11 +52,11 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     allow_empty_where: bool
     data_set: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
 
-    def __init__ (self, table: Table, *, allow_empty_where=False) -> None:
+    def __init__ (self, table: Table | str, *, allow_empty_where=False) -> None:
         super().__init__()
-        self.table = table
         self.data_set = []
         self.allow_empty_where = allow_empty_where
+        self.table = table if isinstance(table, Table) else Table(table, None)
 
     def __repr__ (self) -> str:
         return f"<UPDATE {self.table.to_table_name()!r} {len(self.data_set)} Columns(s)>"
@@ -105,13 +105,18 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
         return "\n".join(parts), params
 
-    def Set (self, *value: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
+    def Set (self, *value: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression, **columns: SQLValue) -> Self:
         """Apply `SET {column} = {value}, ...`  
-        `.Set(T.users.name == "Foo", T.users.id.DEFAULT_VALUE)`"""
-        if not value:
+        `.Set(T.users.name == "Foo", T.users.id.DEFAULT_VALUE)`  
+        `.Set(name="Foo", id=1)`"""
+        if not value and not columns:
             raise ValueError("At least one value is required on Update().Set()")
 
         self.data_set.extend(value)
+        self.data_set.extend(
+            ColumnEqualsValue(self.table.Column(column), "=", value)
+            for column, value in columns.items()
+        )
         return self
 
     @override

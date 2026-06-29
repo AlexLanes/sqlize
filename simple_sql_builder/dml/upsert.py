@@ -1,6 +1,7 @@
 # std
 from typing import Self
 # internal
+from simple_sql_builder.shared import SQLValue
 from simple_sql_builder.expression import Expression
 from simple_sql_builder.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpression
 from simple_sql_builder.table import Table
@@ -31,12 +32,12 @@ class Upsert (SupportsReturning, SupportParameter):
     data_matched: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
     data_not_matched: list[ColumnEqualsValue | ColumnWithDefaultValue]
 
-    def __init__ (self, table: Table, *, on: Expression) -> None:
+    def __init__ (self, table: Table | str, *, on: Expression) -> None:
         super().__init__()
-        self.table = table
         self.data_on = on
         self.data_matched = []
         self.data_not_matched = []
+        self.table = table if isinstance(table, Table) else Table(table, None)
 
     def __repr__ (self) -> str:
         return f"<UPDATE or INSERT {self.table.to_table_name()!r}"
@@ -83,22 +84,32 @@ class Upsert (SupportsReturning, SupportParameter):
             if rollback_on_error: conn.rollback()
             raise
 
-    def WhenMatched (self, *to_update: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression) -> Self:
+    def WhenMatched (self, *to_update: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression, **columns: SQLValue) -> Self:
         """Values to `Update` if matched  
-        `.WhenMatched(T.users.name == "Foo", T.users.last_update.DEFAULT_VALUE)`"""
-        if not to_update:
+        `.WhenMatched(T.users.name == "Foo", T.users.last_update.DEFAULT_VALUE)`  
+        `.WhenMatched(name="Foo", last_update=datetime.now())`"""
+        if not to_update and not columns:
             raise ValueError("At least one value is required on Upsert().WhenMatched()")
 
         self.data_matched.extend(to_update)
+        self.data_matched.extend(
+            ColumnEqualsValue(self.table.Column(column), "=", value)
+            for column, value in columns.items()
+        )
         return self
 
-    def WhenNotMatched (self, *to_insert: ColumnEqualsValue | ColumnWithDefaultValue) -> Self:
+    def WhenNotMatched (self, *to_insert: ColumnEqualsValue | ColumnWithDefaultValue, **columns: SQLValue) -> Self:
         """Values to `Insert` if not matched  
-        `.WhenNotMatched(T.users.name == "Foo", T.users.last_update.DEFAULT_VALUE)`"""
-        if not to_insert:
+        `.WhenNotMatched(T.users.name == "Foo", T.users.last_update.DEFAULT_VALUE)`  
+        `.WhenMatched(name="Foo", last_update=datetime.now())`"""
+        if not to_insert and not columns:
             raise ValueError("At least one value is required on Upsert().WhenNotMatched()")
 
         self.data_not_matched.extend(to_insert)
+        self.data_not_matched.extend(
+            ColumnEqualsValue(self.table.Column(column), "=", value)
+            for column, value in columns.items()
+        )
         return self
 
 __all__ = ["Upsert"]

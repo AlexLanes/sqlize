@@ -3,7 +3,7 @@ from typing import Self
 from abc import ABC, abstractmethod
 # internal
 from simple_sql_builder.parameters import *
-from simple_sql_builder.shared import SequenceAny, ManySequenceAny, DataSQL
+from simple_sql_builder.shared import SequenceAny, ManySequenceAny, DataSQL, quote
 from simple_sql_builder.expression import Expression, OrderableExpression, AliasedExpression
 from simple_sql_builder.column import Column, AliasedColumn
 
@@ -159,27 +159,34 @@ class SupportsPaging:
 
 class SupportsReturning:
 
-    data_returning: DataSQL | None
     data_output: DataSQL | None
+    data_returning: DataSQL | None
 
     def __init__ (self) -> None:
         super().__init__()
         self.data_returning = self.data_output = None
 
-    def Returning (self, *value: Column | AliasedColumn | AliasedExpression) -> Self:
+    def Returning (self, *columns: str | Column | AliasedColumn | AliasedExpression) -> Self:
         """Apply `RETURNING {Columns}`  
+        `.Returning("*")`  
         `.Returning(A.All())`  
         `.Returning(T.users.All())`  
+        `.Returning(T.users.id, A.name, "last_name")`  
+        `.Returning(A.first_name.Concat(A.last_name).As("full_name"))`
+        ## PostgreSQL
         `.Returning(T.old.name.As("old_name"), T.new.name.As("new_name"))`  
-        `.Returning(T.users.id, A.name, A.first_name.Concat(A.last_name).As("full_name"))`"""
-        if not value:
+        """
+        if not columns:
             return self
 
         sqls, params = [], []
-        for column in value:
-            sql = column.to_sql(table_alias=False)
-            sqls.append(sql.join())
-            params.extend(sql)
+        for column in columns:
+            if isinstance(column, str):
+                sqls.append(quote(column))
+            else:
+                sql = column.to_sql(table_alias=False)
+                sqls.append(sql.join())
+                params.extend(sql)
 
         self.data_returning = DataSQL(
             "RETURNING " + ", ".join(sqls),
@@ -188,18 +195,23 @@ class SupportsReturning:
 
         return self
 
-    def Output (self, *value: Column | AliasedExpression) -> Self:
+    def Output (self, *columns: str | Column | AliasedExpression) -> Self:
         """Apply `OUTPUT {Columns}`  
+        `.Output("*")`  
+        `.Output(A.All())`  
         `.Output(T.inserted.All())`  
         `.Output(T.deleted.name.As("old_name"), T.inserted.name.As("new_name"))`"""
-        if not value:
+        if not columns:
             return self
 
         sqls, params = [], []
-        for column in value:
-            sql = column.to_sql(table_alias=False)
-            sqls.append(sql.join())
-            params.extend(sql)
+        for column in columns:
+            if isinstance(column, str):
+                sqls.append(quote(column))
+            else:
+                sql = column.to_sql(table_alias=False)
+                sqls.append(sql.join())
+                params.extend(sql)
 
         self.data_output = DataSQL(
             "OUTPUT " + ", ".join(sqls),
