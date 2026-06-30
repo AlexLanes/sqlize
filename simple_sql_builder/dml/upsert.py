@@ -1,14 +1,21 @@
 # std
 from typing import Self
+from dataclasses import dataclass, field
 # internal
 from simple_sql_builder.shared import SQLValue
 from simple_sql_builder.expression import Expression
 from simple_sql_builder.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpression
 from simple_sql_builder.table import Table
-from simple_sql_builder.supports import SupportsReturning, SupportParameter
+from simple_sql_builder.supports import SupportsReturning, SupportParameters, Data
 from simple_sql_builder import Update, InsertOne, Connection, ResultSQL
 
-class Upsert (SupportsReturning, SupportParameter):
+@dataclass
+class UpsertData (Data):
+    on: Expression | None = None
+    matched: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression] = field(default_factory=list)
+    not_matched: list[ColumnEqualsValue | ColumnWithDefaultValue] = field(default_factory=list)
+
+class Upsert (SupportsReturning, SupportParameters):
     """Builder of `Update` or `Insert` Statement
 
     ## Example
@@ -27,36 +34,35 @@ class Upsert (SupportsReturning, SupportParameter):
     ```
     """
 
-    table: Table
-    data_on: Expression
-    data_matched: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
-    data_not_matched: list[ColumnEqualsValue | ColumnWithDefaultValue]
+    data: UpsertData
 
     def __init__ (self, table: Table | str, *, on: Expression) -> None:
         super().__init__()
-        self.data_on = on
-        self.data_matched = []
-        self.data_not_matched = []
-        self.table = table if isinstance(table, Table) else Table(table, None)
+        self.data = UpsertData() # type: ignore
+        self.data.on = on
+        self.data.table = table if isinstance(table, Table) else Table(table, None)
 
     def __repr__ (self) -> str:
-        return f"<UPDATE or INSERT {self.table.to_table_name()!r}"
+        assert self.data.table is not None
+        return f"<UPDATE or INSERT {self.data.table.to_table_name()!r}"
 
     def execute (self, conn: Connection, *, rollback_on_error=True) -> tuple[bool, ResultSQL]:
         """Use a `Connection` to execute `Update` or `Insert` Statement
         - `WhenMatched` do `Update`
         - `WhenNotMatched` do `Insert`
         - Returns `(updated, ResultSQL)`"""
-        if not self.data_matched:
+        assert self.data.on is not None
+        assert self.data.table is not None
+        if not self.data.matched:
             raise ValueError("Upsert().WhenMatched() should be called first")
-        if not self.data_not_matched:
+        if not self.data.not_matched:
             raise ValueError("Upsert().WhenNotMatched() should be called first")
 
         # TRY UPDATE
         try:
-            update = Update(self.table).Set(*self.data_matched).Where(self.data_on)
-            update.data_returning = self.data_returning
-            update.data_output = self.data_output
+            update = Update(self.data.table).Set(*self.data.matched).Where(self.data.on)
+            update.data.returning = self.data.returning
+            update.data.output = self.data.output
             result = conn.execute(update)
             if 1 in (result.rowcount, result.returned): return (True, result)
             assert not result, (
@@ -69,9 +75,9 @@ class Upsert (SupportsReturning, SupportParameter):
 
         # TRY INSERT
         try:
-            insert = InsertOne(into=self.table).Values(*self.data_not_matched)
-            insert.data_returning = self.data_returning
-            insert.data_output = self.data_output
+            insert = InsertOne(self.data.table).Values(*self.data.not_matched)
+            insert.data.returning = self.data.returning
+            insert.data.output = self.data.output
             result = conn.execute(insert)
             assert 1 in (result.rowcount, result.returned), (
                 "Upsert().execute() did not match any row to Update "
@@ -86,12 +92,13 @@ class Upsert (SupportsReturning, SupportParameter):
         """Values to `Update` if matched  
         `.WhenMatched(T.users.name == "Foo", T.users.last_update.DEFAULT_VALUE)`  
         `.WhenMatched(name="Foo", last_update=datetime.now())`"""
+        assert self.data.table is not None
         if not to_update and not columns:
             raise ValueError("At least one value is required on Upsert().WhenMatched()")
 
-        self.data_matched.extend(to_update)
-        self.data_matched.extend(
-            ColumnEqualsValue(self.table.Column(column), "=", value)
+        self.data.matched.extend(to_update)
+        self.data.matched.extend(
+            ColumnEqualsValue(self.data.table.Column(column), "=", value)
             for column, value in columns.items()
         )
         return self
@@ -99,13 +106,14 @@ class Upsert (SupportsReturning, SupportParameter):
     def WhenNotMatched (self, *to_insert: ColumnEqualsValue | ColumnWithDefaultValue, **columns: SQLValue) -> Self:
         """Values to `Insert` if not matched  
         `.WhenNotMatched(T.users.name == "Foo", T.users.last_update.DEFAULT_VALUE)`  
-        `.WhenMatched(name="Foo", last_update=datetime.now())`"""
+        `.WhenNotMatched(name="Foo", last_update=datetime.now())`"""
+        assert self.data.table is not None
         if not to_insert and not columns:
             raise ValueError("At least one value is required on Upsert().WhenNotMatched()")
 
-        self.data_not_matched.extend(to_insert)
-        self.data_not_matched.extend(
-            ColumnEqualsValue(self.table.Column(column), "=", value)
+        self.data.not_matched.extend(to_insert)
+        self.data.not_matched.extend(
+            ColumnEqualsValue(self.data.table.Column(column), "=", value)
             for column, value in columns.items()
         )
         return self

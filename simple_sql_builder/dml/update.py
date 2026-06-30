@@ -2,7 +2,7 @@
 from typing import Self, override
 # internal
 from simple_sql_builder.shared import SequenceAny, SQLValue
-from simple_sql_builder.expression import Expression, to_sql
+from simple_sql_builder.expression import to_sql
 from simple_sql_builder.column import ColumnWithDefaultValue, AliasedExpression, ColumnEqualsValue
 from simple_sql_builder.table import Table
 from simple_sql_builder.supports import ExecutableStatement, SupportsReturning, SupportsWhere
@@ -48,56 +48,59 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     ```
     """
 
-    table: Table
-    allow_empty_where: bool
     data_set: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
 
     def __init__ (self, table: Table | str, *, allow_empty_where=False) -> None:
         super().__init__()
         self.data_set = []
-        self.allow_empty_where = allow_empty_where
-        self.table = table if isinstance(table, Table) else Table(table, None)
+        setattr(self, "allow_empty_where", allow_empty_where)
+        self.data.table = table if isinstance(table, Table) else Table(table, None)
 
     def __repr__ (self) -> str:
-        return f"<UPDATE {self.table.to_table_name()!r} {len(self.data_set)} Columns(s)>"
+        assert self.data.table is not None
+        return f"<UPDATE {self.data.table.to_table_name()!r} {len(self.data_set)} Columns(s)>"
 
     @override
     def to_sql (self) -> tuple[str, SequenceAny]:
+        assert self.data.table is not None
         if not self.data_set:
             raise ValueError("Update().Set() should be called first")
-        if not self.allow_empty_where and self.data_where is None:
+        if self.data.where is None and not getattr(self, "allow_empty_where", False):
             raise ValueError("Missing Update().Where(Expression)")
 
         params = []
         sets = list[str]()
-        positional = self.parameter()
+        positional = self.data.parameter()
         for value in self.data_set:
             match value:
 
                 case ColumnEqualsValue():
-                    name = value.left.quote_name(self.quote_info)
+                    name = value.left.quote_name(self.data.quote_info)
                     sets.append(f"{name} = {positional.next()}")
                     params.append(value.right)
 
                 case ColumnWithDefaultValue():
-                    name = value.column.quote_name(self.quote_info)
+                    name = value.column.quote_name(self.data.quote_info)
                     sets.append(f"{name} = {value.to_sql().join()}")
 
                 case AliasedExpression():
-                    name = value.quote_alias(self.quote_info)
-                    sql = to_sql(value.expression, table_alias=False, quote_info=self.quote_info)
+                    name = value.quote_alias(self.data.quote_info)
+                    sql = to_sql(value.expression, table_alias=False, quote_info=self.data.quote_info)
                     params.extend(sql)
                     parameterized = sql.join().format(*(positional.next() for _ in sql))
                     sets.append(f"{name} = {parameterized}")
 
-                case _: raise TypeError(f"Invalid value found on Update.Set({value!r})")
+                case _: raise TypeError(f"Invalid value found on Update().Set({value!r})")
 
         parts = [
-            f"UPDATE {self.table.to_table_name()} SET",
+            f"UPDATE {self.data.table.to_table_name()} SET",
             ",\n".join(sets),
         ]
 
-        for data in (self.data_output, self.data_where, self.data_returning):
+        table_alias = False
+        for data in (self.data.data_output(table_alias),
+                     self.data.data_where(table_alias),
+                     self.data.data_returning(table_alias)):
             if data is None: continue
             parameterized = (positional.next() for _ in data)
             parts.append(data.join().format(*parameterized))
@@ -109,21 +112,15 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
         """Apply `SET {column} = {value}, ...`  
         `.Set(T.users.name == "Foo", T.users.id.DEFAULT_VALUE)`  
         `.Set(name="Foo", id=1)`"""
+        assert self.data.table
         if not value and not columns:
             raise ValueError("At least one value is required on Update().Set()")
 
         self.data_set.extend(value)
         self.data_set.extend(
-            ColumnEqualsValue(self.table.Column(column), "=", value)
+            ColumnEqualsValue(self.data.table.Column(column), "=", value)
             for column, value in columns.items()
         )
-        return self
-
-    @override
-    def Where (self, expression: Expression) -> Self:
-        sql = expression.to_sql(table_alias=False, quote_info=self.quote_info)
-        sql.sqls.insert(0, "WHERE")
-        self.data_where = sql
         return self
 
 __all__ = ["Update"]

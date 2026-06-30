@@ -1,5 +1,6 @@
 # std
 from __future__ import annotations
+from dataclasses import dataclass, field
 from typing import (
     Any, Self, Literal,
     Iterable, override
@@ -11,11 +12,66 @@ from simple_sql_builder.column     import Column, AliasedColumn
 from simple_sql_builder.table      import Table
 from simple_sql_builder.supports   import *
 
+@dataclass
+class SelectData (Data):
+
+    distinct: bool = False
+    top: int | None = None
+    table: Table | CteTable | None = None 
+
+    columns: list[Column | AliasedExpression] = field(default_factory=list)
+    def data_columns (self, table_alias=True) -> DataSQL:
+        return DataSQL.merge(
+            column.to_sql(table_alias=table_alias, quote_info=self.quote_info)
+            for column in self.columns
+        )
+
+    joins: list[tuple[
+        Literal["INNER", "LEFT", "RIGHT", "FULL"],
+        Table | CteTable,
+        Expression
+    ]] = field(default_factory=list)
+
+    groupby: list[Expression | AliasedColumn] = field(default_factory=list)
+    def data_groupby (self) -> DataSQL | None:
+        if not self.groupby:
+            return
+
+        sql_parts, all_params = [], []
+        for exp in self.groupby:
+            sql = exp.to_sql(quote_info=self.quote_info)
+            sql_parts.append(sql.join())
+            all_params.extend(sql)
+
+        return DataSQL(
+            "GROUP BY " + ", ".join(sql_parts),
+            all_params
+        )
+
+    having: list[Expression | AliasedColumn] = field(default_factory=list)
+    def data_having (self) -> DataSQL | None:
+        if not self.having:
+            return
+
+        sql_parts, all_params = [], []
+        for exp in self.having:
+            sql = exp.to_sql(quote_info=self.quote_info)
+            sql_parts.append(sql.join())
+            all_params.extend(sql)
+
+        return DataSQL(
+            "HAVING " + ", ".join(sql_parts),
+            all_params
+        )
+
 class CteCollector:
     def collect_ctes (self) -> list[CteTable]:
         return []
 
 class Queryable (ExecutableStatement, SupportsPaging, SupportsOrderBy, CteCollector):
+
+    def __init__ (self) -> None:
+        super().__init__()
 
     @override
     def to_sql (self, *, render_cte=True, use_parameter=True) -> tuple[str, SequenceAny]:
@@ -81,7 +137,7 @@ class Union (Queryable):
     def to_sql (self, **kwargs) -> tuple[str, SequenceAny]:
         sql_parts = list[str]()
         all_params = list[Any]()
-        parameter = self.parameter()
+        parameter = self.data.parameter()
         use_parameter = bool(kwargs.get("use_parameter", True))
 
         def sql_format (sql: str, params: Iterable[Any]) -> str:
@@ -107,9 +163,10 @@ class Union (Queryable):
                 )
 
         spaced = False
-        for data in (self.data_orderby, self.data_paging_sql):
-            if data is None: continue
-            if not spaced: spaced = sql_parts.append("") is None
+        for data in (self.data.data_orderby(), self.data.data_paging()):
+            if data is None:
+                continue
+            spaced = spaced or (sql_parts.append("") is None)
             sql_parts.append(sql_format(data.join(), data))
 
         return "\n".join(sql_parts), all_params
@@ -187,34 +244,21 @@ class Select (Queryable, SupportsWhere):
     ```
     """
 
-    data_distinct: bool
-    data_top: int | None
-    table: Table | CteTable | None
-    data_columns: list[Column | AliasedExpression]
-    data_joins: list[tuple[
-        Literal["INNER", "LEFT", "RIGHT", "FULL"],
-        Table | CteTable,
-        DataSQL
-    ]]
-    data_having: DataSQL | None
-    data_groupby: DataSQL | None
+    data: SelectData
 
     def __init__ (self, *columns: Column | AliasedExpression) -> None:
-        super().__init__()
         if not columns:
             raise ValueError("No columns informed on Select(). Consider using Select(T.table.All())")
 
-        self.data_top = None
-        self.data_distinct = False
-        self.data_columns = list(columns)
-        self.data_joins = []
-        self.table = self.data_groupby = self.data_having = None
+        super().__init__()
+        self.data = SelectData() # type: ignore
+        self.data.columns.extend(columns)
 
     def __repr__ (self) -> str:
-        d = " DISTINCT " if self.data_distinct else " "
+        d = " DISTINCT " if self.data.distinct else " "
         return (
-            f"<SELECT{d}FROM {self.table.to_table_sql()}>"
-            if self.table else 
+            f"<SELECT{d}FROM {self.data.table.to_table_sql()}>"
+            if self.data.table else 
             f"<SELECT{d}empty>"
         )
 
@@ -222,18 +266,18 @@ class Select (Queryable, SupportsWhere):
     def collect_ctes (self) -> list[CteTable]:
         return [
             cte
-            for table in (self.table, *(t for _, t, _ in self.data_joins))
+            for table in (self.data.table, *(t for _, t, _ in self.data.joins))
                 if isinstance(table, CteTable)
             for cte in table.collect_ctes()
         ]
 
     @override
     def to_sql (self, **kwargs) -> tuple[str, SequenceAny]:
-        if self.table is None:
+        if self.data.table is None:
             raise ValueError("Table not set on Select().From(Table)")
 
         all_params = list[Any]()
-        parameter = self.parameter()
+        parameter = self.data.parameter()
         use_parameter = bool(kwargs.get("use_parameter", True))
 
         def sql_format (sql: str, params: Iterable[Any]) -> str:
@@ -244,29 +288,33 @@ class Select (Queryable, SupportsWhere):
             )
 
         # SELECT DISTINCT TOP
-        select_parts = ["SELECT"]
-        if self.data_distinct: select_parts.append("DISTINCT")
-        if top := self.data_top:
+        sql_parts = ["SELECT"]
+        if self.data.distinct:
+            sql_parts.append("DISTINCT")
+        if top := self.data.top:
             all_params.append(top)
-            select_parts.append(sql_format("TOP ({})", [top]))
+            sql_parts.append(sql_format("TOP ({})", [top]))
 
         # COLUMNS FROM
-        data = DataSQL.merge(x.to_sql(quote_info=self.quote_info) for x in self.data_columns)
-        all_params.extend(data)
-        select_parts.append(sql_format(data.join(", "), data))
+        columns = self.data.data_columns()
+        all_params.extend(columns)
+        sql_parts.append(sql_format(columns.join(", "), columns))
         sql_parts = [
-            " ".join(select_parts),
-            f"FROM { self.table.to_table_sql() }"
+            " ".join(sql_parts),
+            f"FROM { self.data.table.to_table_sql() }"
         ]
 
         # JOINS
-        for name, table, data in self.data_joins:
+        for name, table, expression in self.data.joins:
+            data = expression.to_sql(quote_info=self.data.quote_info)
             all_params.extend(data)
             sql = sql_format(data.join(), data)
             sql_parts.append(f"{name} JOIN {table.to_table_sql()} ON {sql}")
 
         # WHERE GROUPBY HAVING ORDERBY PAGING
-        for data in (self.data_where, self.data_groupby, self.data_having, self.data_orderby, self.data_paging_sql):
+        for data in (self.data.data_where(), self.data.data_groupby(),
+                     self.data.data_having(), self.data.data_orderby(),
+                     self.data.data_paging()):
             if data is None: continue
             all_params.extend(data)
             sql_parts.append(sql_format(data.join(), data))
@@ -300,7 +348,7 @@ class Select (Queryable, SupportsWhere):
 
     def Distinct (self) -> Self:
         """Apply `SELECT DISTINCT`"""
-        self.data_distinct = True
+        self.data.distinct = True
         return self
 
     def Top (self, rows: int | None) -> Self:
@@ -310,17 +358,17 @@ class Select (Queryable, SupportsWhere):
             return self
         if rows <= 0:
             raise ValueError(f"Select().Top({ rows }) should be >= 1")
-        self.data_top = rows
+        self.data.top = rows
         return self
 
     def From (self, table: Table | CteTable) -> Self:
         """Add `table` to Select `FROM`"""
-        self.table = table
+        self.data.table = table
         return self
 
     def AsCte (self, name: str) -> CteTable:
         """Transform `Select` into a `CTE` that works as a `Table`"""
-        if self.table is None:
+        if self.data.table is None:
             raise ValueError("Table not set on Select().From(Table)")
         return CteTable(name, self)
 
@@ -331,33 +379,25 @@ class Select (Queryable, SupportsWhere):
     def Join (self, table: Table | CteTable, on: Expression) -> Self:
         """Apply `INNER JOIN {table} ON {on}`
         - `Join(T.orders, T.orders.user_id == T.users.id)`"""
-        self.data_joins.append(
-            ("INNER", table, on.to_sql(quote_info=self.quote_info))
-        )
+        self.data.joins.append(("INNER", table, on))
         return self
 
     def LeftJoin (self, table: Table | CteTable, on: Expression) -> Self:
         """Apply `LEFT JOIN {table} ON {on}`
         - `LeftJoin(T.orders, T.orders.user_id == T.users.id)`"""
-        self.data_joins.append(
-            ("LEFT", table, on.to_sql(quote_info=self.quote_info))
-        )
+        self.data.joins.append(("LEFT", table, on))
         return self
 
     def RightJoin (self, table: Table | CteTable, on: Expression) -> Self:
         """Apply `RIGHT JOIN {table} ON {on}`
         - `RightJoin(T.orders, T.orders.user_id == T.users.id)`"""
-        self.data_joins.append(
-            ("RIGHT", table, on.to_sql(quote_info=self.quote_info))
-        )
+        self.data.joins.append(("RIGHT", table, on))
         return self
 
     def FullJoin (self, table: Table | CteTable, on: Expression) -> Self:
         """Apply `FULL JOIN {table} ON {on}`
         - `FullJoin(T.orders, T.orders.user_id == T.users.id)`"""
-        self.data_joins.append(
-            ("FULL", table, on.to_sql(quote_info=self.quote_info))
-        )
+        self.data.joins.append(("FULL", table, on))
         return self
 
     #----------#
@@ -366,30 +406,12 @@ class Select (Queryable, SupportsWhere):
 
     def GroupBy (self, *expression: Expression | AliasedColumn) -> Self:
         """Apply `GROUP BY {expression, ...}`"""
-        sql_parts, all_params = [], []
-        for exp in expression:
-            sql = exp.to_sql(quote_info=self.quote_info)
-            sql_parts.append(sql.join())
-            all_params.extend(sql)
-
-        self.data_groupby = DataSQL(
-            "GROUP BY " + ", ".join(sql_parts),
-            all_params
-        )
+        self.data.groupby.extend(expression)
         return self
 
     def Having (self, *expression: Expression | AliasedColumn) -> Self:
         """Apply `HAVING {expression, ...}`"""
-        sql_parts, all_params = [], []
-        for exp in expression:
-            sql = exp.to_sql(quote_info=self.quote_info)
-            sql_parts.append(sql.join())
-            all_params.extend(sql)
-
-        self.data_having = DataSQL(
-            "HAVING " + ", ".join(sql_parts),
-            all_params
-        )
+        self.data.having.extend(expression)
         return self
 
     #--------#

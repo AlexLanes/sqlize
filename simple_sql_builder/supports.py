@@ -1,13 +1,17 @@
 # std
-from typing import Self
+from typing import Self, Protocol
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 # internal
 from simple_sql_builder.parameters import *
 from simple_sql_builder.shared import SequenceAny, ManySequenceAny, DataSQL, quote
 from simple_sql_builder.expression import Expression, OrderableExpression, AliasedExpression
 from simple_sql_builder.column import Column, AliasedColumn
+from simple_sql_builder.table import Table
 
-class SupportParameter:
+@dataclass
+class Data:
+    """`@dataclass` of private attributes combined with `SupportParameters`"""
 
     quote_info: tuple[bool, str] | None = None
     """Used as `enforce, char_quote` and `None` for `"` if contains space"""
@@ -15,34 +19,91 @@ class SupportParameter:
     """Positional Parameter
     - `Default: ?`"""
 
-    def set_parameter (self, positional: Positionals | type[IPositionalParameter],
-                             quote_info: tuple[bool, str] | None = None) -> Self:
-        """Change `PositionalParameter` and `quote_info`"""
-        self.quote_info = quote_info
+    table: Table | None = None
 
-        if not isinstance(positional, str):
-            self.parameter = positional
-            return self
-        if p := POSITIONAL_PARAMETERS.get(positional):
-            self.parameter = p
-            return self
+    where: Expression | None = None
+    def data_where (self, table_alias=True) -> DataSQL | None:
+        if self.where is None: return
+        sql = self.where.to_sql(table_alias=table_alias, quote_info=self.quote_info)
+        sql.sqls.insert(0, "WHERE")
+        return sql
 
-        name = self.__class__.__name__
-        raise ValueError(f"Unexpected Positional Parameter for {name}().set_parameter({positional!r})")
+    orderby: list[OrderableExpression] = field(default_factory=list)
+    def data_orderby (self) -> DataSQL | None:
+        if not self.orderby:
+            return
 
-class ExecutableStatement (ABC, SupportParameter):
-    @abstractmethod
-    def to_sql (self) -> tuple[str, SequenceAny | ManySequenceAny]:
-        """`SQL: Parameterized` as `(sql, params)`"""
-        ...
+        sqls, params = [], []
+        info = self.quote_info
 
-class SupportsWhere:
+        for order in self.orderby:
+            sql = order.to_sql(quote_info=info)
+            sqls.append(sql.join())
+            params.extend(sql)
 
-    data_where: DataSQL | None
+        return DataSQL("ORDER BY " + ", ".join(sqls), params)
+
+    paging: list[tuple[int, str, int]] = field(default_factory=list)
+    """`[(order weight, "SQL {}", value)]`"""
+    def data_paging (self) -> DataSQL | None:
+        if not self.paging:
+            return
+
+        sqls, params = [], []
+        for _, sql, value in sorted(self.paging, key=lambda x: x[0]):
+            sqls.append(sql)
+            params.append(value)
+        return DataSQL("\n".join(sqls), params)
+
+    returning: list[str | Column | AliasedColumn | AliasedExpression] = field(default_factory=list)
+    def data_returning (self, table_alias=False) -> DataSQL | None:
+        if not self.returning:
+            return
+
+        sqls, params = [], []
+        quote_info = self.quote_info
+
+        for column in self.returning:
+            if isinstance(column, str):
+                sqls.append(quote(column, quote_info))
+            else:
+                sql = column.to_sql(table_alias=table_alias, quote_info=quote_info)
+                sqls.append(sql.join())
+                params.extend(sql)
+
+        return DataSQL(
+            "RETURNING " + ", ".join(sqls),
+            params
+        )
+
+    output: list[str | Column | AliasedColumn | AliasedExpression] = field(default_factory=list)
+    def data_output (self, table_alias=False) -> DataSQL | None:
+        if not self.output:
+            return
+
+        sqls, params = [], []
+        quote_info = self.quote_info
+
+        for column in self.output:
+            if isinstance(column, str):
+                sqls.append(quote(column, quote_info))
+            else:
+                sql = column.to_sql(table_alias=table_alias, quote_info=quote_info)
+                sqls.append(sql.join())
+                params.extend(sql)
+
+        return DataSQL(
+            "OUTPUT " + ", ".join(sqls),
+            params
+        )
+
+class SupportsData (Protocol):
+    data: Data
+
+class SupportsWhere (SupportsData):
 
     def __init__ (self) -> None:
         super().__init__()
-        self.data_where = None
 
     def Where (self, expression: Expression) -> Self:
         """Apply `WHERE {expression}`
@@ -56,19 +117,13 @@ class SupportsWhere:
         `Where( (users.role == "admin").Not() )`  
         `Where( (users.role == "admin") & (users.name != None) )`  
         """
-        info = self.quote_info if isinstance(self, SupportParameter) else None
-        sql = expression.to_sql(quote_info=info)
-        sql.sqls.insert(0, "WHERE")
-        self.data_where = sql
+        self.data.where = expression
         return self
 
-class SupportsOrderBy:
-
-    data_orderby: DataSQL | None
+class SupportsOrderBy (SupportsData):
 
     def __init__ (self) -> None:
         super().__init__()
-        self.data_orderby = None
 
     def OrderBy (self, *orderable: OrderableExpression) -> Self:
         """Apply `ORDER BY {order, ...}`
@@ -84,38 +139,13 @@ class SupportsOrderBy:
         )
         ```
         """
-        sqls, params = [], []
-        info = self.quote_info if isinstance(self, SupportParameter) else None
-
-        for order in orderable:
-            sql = order.to_sql(quote_info=info)
-            sqls.append(sql.join())
-            params.extend(sql)
-
-        self.data_orderby = DataSQL("ORDER BY " + ", ".join(sqls), params)
+        self.data.orderby.extend(orderable)
         return self
 
-class SupportsPaging:
-
-    data_paging: list[tuple[int, str, int]]
-    """`[(order weight, "SQL {}", value)]`"""
+class SupportsPaging (SupportsData):
 
     def __init__ (self) -> None:
         super().__init__()
-        self.data_paging = []
-
-    @property
-    def data_paging_sql (self) -> DataSQL | None:
-        """`SQLs` version of `LIMITS` and `OFFSETS`
-        - `None` if empty"""
-        if not self.data_paging:
-            return
-
-        sqls, params = [], []
-        for _, sql, value in sorted(self.data_paging, key=lambda x: x[0]):
-            sqls.append(sql)
-            params.append(value)
-        return DataSQL("\n".join(sqls), params)
 
     def Limit (self, value: int | None) -> Self:
         """Apply `LIMIT {value}`
@@ -124,7 +154,7 @@ class SupportsPaging:
             return self
         if value <= 0:
             raise ValueError(f"{self.__class__.__name__}().Limit({value}) should be >= 1")
-        self.data_paging.append((1, "LIMIT {}", value))
+        self.data.paging.append((1, "LIMIT {}", value))
         return self
 
     def Offset (self, value: int | None) -> Self:
@@ -134,7 +164,7 @@ class SupportsPaging:
             return self
         if value < 0:
             raise ValueError(f"{self.__class__.__name__}().Offset({value}) should be >= 0")
-        self.data_paging.append((2, "OFFSET {}", value))
+        self.data.paging.append((2, "OFFSET {}", value))
         return self
 
     def OffsetRows (self, value: int | None) -> Self:
@@ -144,7 +174,7 @@ class SupportsPaging:
             return self
         if value < 0:
             raise ValueError(f"{self.__class__.__name__}().OffsetRows({value}) should be >= 0")
-        self.data_paging.append((2, "OFFSET {} ROWS", value))
+        self.data.paging.append((2, "OFFSET {} ROWS", value))
         return self
 
     def FetchNextRowsOnly (self, value: int | None) -> Self:
@@ -154,7 +184,7 @@ class SupportsPaging:
             return self
         if value <= 0:
             raise ValueError(f"{self.__class__.__name__}().FetchNextRowsOnly({value}) should be >= 1")
-        self.data_paging.append((3, "FETCH NEXT {} ROWS ONLY", value))
+        self.data.paging.append((3, "FETCH NEXT {} ROWS ONLY", value))
         return self
 
     def FetchFirstRowsOnly (self, value: int | None) -> Self:
@@ -164,17 +194,13 @@ class SupportsPaging:
             return self
         if value <= 0:
             raise ValueError(f"{self.__class__.__name__}().FetchFirstRowsOnly({value}) should be >= 1")
-        self.data_paging.append((3, "FETCH FIRST {} ROWS ONLY", value))
+        self.data.paging.append((3, "FETCH FIRST {} ROWS ONLY", value))
         return self
 
-class SupportsReturning:
-
-    data_output: DataSQL | None
-    data_returning: DataSQL | None
+class SupportsReturning (SupportsData):
 
     def __init__ (self) -> None:
         super().__init__()
-        self.data_returning = self.data_output = None
 
     def Returning (self, *columns: str | Column | AliasedColumn | AliasedExpression) -> Self:
         """Apply `RETURNING {Columns}`  
@@ -184,61 +210,63 @@ class SupportsReturning:
         `.Returning(T.users.id, A.name, "last_name")`  
         `.Returning(A.first_name.Concat(A.last_name).As("full_name"))`
         ## PostgreSQL
-        `.Returning(T.old.name.As("old_name"), T.new.name.As("new_name"))`  
-        """
-        if not columns:
-            return self
-
-        sqls, params = [], []
-        info = self.quote_info if isinstance(self, SupportParameter) else None
-
-        for column in columns:
-            if isinstance(column, str):
-                sqls.append(quote(column, info))
-            else:
-                sql = column.to_sql(table_alias=False, quote_info=info)
-                sqls.append(sql.join())
-                params.extend(sql)
-
-        self.data_returning = DataSQL(
-            "RETURNING " + ", ".join(sqls),
-            params
-        )
-
+        `.Returning(T.old.name.As("old_name"), T.new.name.As("new_name"))`"""
+        self.data.returning.extend(columns)
         return self
 
-    def Output (self, *columns: str | Column | AliasedExpression) -> Self:
+    def Output (self, *columns: str | Column | AliasedColumn | AliasedExpression) -> Self:
         """Apply `OUTPUT {Columns}`  
         `.Output("*")`  
         `.Output(A.All())`  
         `.Output(T.inserted.All())`  
         `.Output(T.deleted.name.As("old_name"), T.inserted.name.As("new_name"))`"""
-        if not columns:
-            return self
-
-        sqls, params = [], []
-        info = self.quote_info if isinstance(self, SupportParameter) else None
-
-        for column in columns:
-            if isinstance(column, str):
-                sqls.append(quote(column, info))
-            else:
-                sql = column.to_sql(table_alias=False, quote_info=info)
-                sqls.append(sql.join())
-                params.extend(sql)
-
-        self.data_output = DataSQL(
-            "OUTPUT " + ", ".join(sqls),
-            params
-        )
-
+        self.data.output.extend(columns)
         return self
 
+class SupportParameters (SupportsData):
+
+    data: Data
+
+    def __init__ (self) -> None:
+        super().__init__()
+        self.data = Data()
+
+    def set_parameter (self, positional: Positionals | type[IPositionalParameter],
+                             quote_info: tuple[bool, str] | None = None) -> Self:
+        """Change `PositionalParameter` and `quote_info`"""
+        if not hasattr(self, "data"):
+            self.data = Data()
+
+        self.data.quote_info = quote_info
+
+        if not isinstance(positional, str):
+            self.data.parameter = positional
+            return self
+        if p := POSITIONAL_PARAMETERS.get(positional):
+            self.data.parameter = p
+            return self
+
+        name = self.__class__.__name__
+        raise ValueError(f"Unexpected Positional Parameter for {name}().set_parameter({positional!r})")
+
+class ExecutableStatement (ABC, SupportParameters):
+
+    def __init__ (self) -> None:
+        super().__init__()
+
+    @abstractmethod
+    def to_sql (self) -> tuple[str, SequenceAny | ManySequenceAny]:
+        """`SQL: Parameterized` as `(sql, params)`"""
+        ...
+
 __all__ = [
+    "Data",
+
     "SupportsWhere",
     "SupportsPaging",
     "SupportsOrderBy",
-    "SupportParameter",
     "SupportsReturning",
+
+    "SupportParameters",
     "ExecutableStatement",
 ]

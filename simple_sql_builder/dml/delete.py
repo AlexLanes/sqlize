@@ -1,8 +1,7 @@
 # std
-from typing import Self, override
+from typing import override
 # internal
 from simple_sql_builder.shared import SequenceAny
-from simple_sql_builder.expression import Expression
 from simple_sql_builder.table import Table
 from simple_sql_builder.supports import ExecutableStatement, SupportsReturning, SupportsWhere
 
@@ -28,39 +27,34 @@ class Delete (ExecutableStatement, SupportsWhere, SupportsReturning):
     ```
     """
 
-    table: Table
-    allow_empty_where: bool
-
-    def __init__ (self, table: Table, *, allow_empty_where=False) -> None:
+    def __init__ (self, table: Table | str, *, allow_empty_where=False) -> None:
         super().__init__()
-        self.table = table
-        self.allow_empty_where = allow_empty_where
+        setattr(self, "allow_empty_where", allow_empty_where)
+        self.data.table = table if isinstance(table, Table) else Table(table, None)
 
     def __repr__ (self) -> str:
-        return f"<DELETE FROM {self.table.to_table_name()!r}>"
+        assert self.data.table is not None
+        return f"<DELETE FROM {self.data.table.to_table_name()!r}>"
 
     @override
     def to_sql (self) -> tuple[str, SequenceAny]:
-        if not self.allow_empty_where and self.data_where is None:
+        assert self.data.table is not None
+        if self.data.where is None and not getattr(self, "allow_empty_where", False):
             raise ValueError("Missing Delete().Where(Expression)")
 
         params = []
-        positional = self.parameter()
-        parts = [f"DELETE FROM {self.table.to_table_name()}"]
+        positional = self.data.parameter()
+        parts = [f"DELETE FROM {self.data.table.to_table_name()}"]
 
-        for data in (self.data_output, self.data_where, self.data_returning):
+        table_alias = False
+        for data in (self.data.data_output(table_alias),
+                     self.data.data_where(table_alias),
+                     self.data.data_returning(table_alias)):
             if data is None: continue
             parameterized = (positional.next() for _ in data)
             parts.append(data.join().format(*parameterized))
             params.extend(data)
 
         return "\n".join(parts), params
-
-    @override
-    def Where (self, expression: Expression) -> Self:
-        sql = expression.to_sql(table_alias=False, quote_info=self.quote_info)
-        sql.sqls.insert(0, "WHERE")
-        self.data_where = sql
-        return self
 
 __all__ = ["Delete"]

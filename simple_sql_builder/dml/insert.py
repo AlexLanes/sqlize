@@ -9,31 +9,33 @@ from simple_sql_builder.supports import SupportsReturning, ExecutableStatement
 
 class InsertDefaultValues (ExecutableStatement, SupportsReturning):
 
-    into: Table
-
     def __init__ (self, into: Table) -> None:
         super().__init__()
-        self.into = into
+        self.data.table = into
 
     def __repr__ (self) -> str:
-        return f"<INSERT INTO {self.into.to_table_name()!r} DEFAULT VALUES>"
+        assert self.data.table is not None
+        return f"<INSERT INTO {self.data.table.to_table_name()!r} DEFAULT VALUES>"
 
     @override
     def to_sql (self) -> tuple[str, SequenceAny]:
-        positional = self.parameter()
-        params, sqls = [], [f"INSERT INTO {self.into.to_table_name()}"]
+        assert self.data.table is not None
 
-        if self.data_output is not None:
-            parameters = (positional.next() for _ in self.data_output)
-            sqls.append(self.data_output.join().format(*parameters))
-            params.extend(self.data_output)
+        table_alias = False
+        positional = self.data.parameter()
+        params, sqls = [], [f"INSERT INTO {self.data.table.to_table_name()}"]
+
+        if data := self.data.data_output(table_alias):
+            parameters = (positional.next() for _ in data)
+            sqls.append(data.join().format(*parameters))
+            params.extend(data)
 
         sqls.append("DEFAULT VALUES")
 
-        if self.data_returning is not None:
-            parameters = (positional.next() for _ in self.data_returning)
-            sqls.append(self.data_returning.join().format(*parameters))
-            params.extend(self.data_returning)
+        if data := self.data.data_returning(table_alias):
+            parameters = (positional.next() for _ in data)
+            sqls.append(data.join().format(*parameters))
+            params.extend(data)
 
         return "\n".join(sqls), params
 
@@ -77,39 +79,40 @@ class InsertOne (ExecutableStatement, SupportsReturning):
     ```
     """
 
-    into: Table
     data_values: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
 
     def __init__ (self, into: Table | str) -> None:
         super().__init__()
         self.data_values = []
-        self.into = into if isinstance(into, Table) else Table(into, None)
+        self.data.table = into if isinstance(into, Table) else Table(into, None)
 
     def __repr__ (self) -> str:
-        return f"<INSERT INTO {self.into.to_table_name()!r} 1 ROW>"
+        assert self.data.table is not None
+        return f"<INSERT INTO {self.data.table.to_table_name()!r} 1 ROW>"
 
     @override
     def to_sql (self) -> tuple[str, SequenceAny]:
+        assert self.data.table is not None
         if not self.data_values:
             raise ValueError("InsertOne().Values() should be called first")
 
         params = []
         columns, values = [], []
-        positional = self.parameter()
+        positional = self.data.parameter()
         for value in self.data_values:
             match value:
 
                 case ColumnEqualsValue():
-                    columns.append(value.left.quote_name(self.quote_info))
+                    columns.append(value.left.quote_name(self.data.quote_info))
                     values.append(positional.next())
                     params.append(value.right)
 
                 case ColumnWithDefaultValue():
-                    columns.append(value.column.quote_name(self.quote_info))
+                    columns.append(value.column.quote_name(self.data.quote_info))
                     values.append(value.to_sql().join())
 
                 case AliasedExpression():
-                    columns.append(value.quote_alias(self.quote_info))
+                    columns.append(value.quote_alias(self.data.quote_info))
                     sql = to_sql(value.expression, table_alias=False)
                     parameters = (positional.next() for _ in sql)
                     values.append(sql.join().format(*parameters))
@@ -118,21 +121,21 @@ class InsertOne (ExecutableStatement, SupportsReturning):
                 case _: raise TypeError(f"Invalid value found on InsertOne().Values({value!r})")
 
         parts = [
-            f"INSERT INTO {self.into.to_table_name()}",
+            f"INSERT INTO {self.data.table.to_table_name()}",
             f"({ ", ".join(columns) })",
         ]
 
-        if self.data_output is not None:
-            parameters = (positional.next() for _ in self.data_output)
-            parts.append(self.data_output.join().format(*parameters))
-            params.extend(self.data_output)
+        if data := self.data.data_output(False):
+            parameters = (positional.next() for _ in data)
+            parts.append(data.join().format(*parameters))
+            params.extend(data)
 
         parts.append(f"VALUES ({ ", ".join(values) })")
 
-        if self.data_returning is not None:
-            parameters = (positional.next() for _ in self.data_returning)
-            parts.append(self.data_returning.join().format(*parameters))
-            params.extend(self.data_returning)
+        if data := self.data.data_returning(False):
+            parameters = (positional.next() for _ in data)
+            parts.append(data.join().format(*parameters))
+            params.extend(data)
 
         return "\n".join(parts), params
 
@@ -140,21 +143,21 @@ class InsertOne (ExecutableStatement, SupportsReturning):
         """Apply `VALUES ({ values })`  
         `.Values(name="Foo", age=11, last_update=datetime.now())`  
         `.Values(T.users.id.DEFAULT_VALUE, T.users.name == "Foo", E.CURRENT_TIMESTAMP.As("last_update"))`"""
+        assert self.data.table is not None
         if not values and not columns:
             raise ValueError("At least one value is required on InsertOne().Values()")
-        if self.data_values:
-            raise ValueError("InsertOne().Values() should be called once")
 
         self.data_values.extend(values)
         self.data_values.extend(
-            ColumnEqualsValue(self.into.Column(column), "=", value)
+            ColumnEqualsValue(self.data.table.Column(column), "=", value)
             for column, value in columns.items()
         )
         return self
 
     def DefaultValues (self) -> InsertDefaultValues:
         """Apply `DEFAULT VALUES`"""
-        return InsertDefaultValues(self.into)
+        assert self.data.table is not None
+        return InsertDefaultValues(self.data.table)
 
 class InsertMany (ExecutableStatement, SupportsReturning):
     """Builder of `Insert` Statement with multiple values
@@ -179,42 +182,44 @@ class InsertMany (ExecutableStatement, SupportsReturning):
     ```
     """
 
-    into: Table
     data_values: list[list[ColumnEqualsValue]]
 
     def __init__ (self, into: Table | str) -> None:
         super().__init__()
         self.data_values = []
-        self.into = into if isinstance(into, Table) else Table(into, None)
+        self.data.table = into if isinstance(into, Table) else Table(into, None)
 
     def __repr__ (self) -> str:
-        return f"<INSERT INTO {self.into.to_table_name()!r} {len(self.data_values)} ROW(S)>"
+        assert self.data.table is not None
+        return f"<INSERT INTO {self.data.table.to_table_name()!r} {len(self.data_values)} ROW(S)>"
 
     @override
     def to_sql (self) -> tuple[str, ManySequenceAny]:
+        assert self.data.table is not None
         if not self.data_values:
             raise ValueError("InsertMany().Values() should be called first")
 
+        table_alias = False
         first = self.data_values[0]
-        positional = self.parameter()
+        positional = self.data.parameter()
         parts = [
-            f"INSERT INTO {self.into.to_table_name()}",
-            f"({ ", ".join(c.left.quote_name(self.quote_info) for c in first) })",
+            f"INSERT INTO {self.data.table.to_table_name()}",
+            f"({ ", ".join(c.left.quote_name(self.data.quote_info) for c in first) })",
         ]
 
         output = []
-        if self.data_output is not None:
-            parameters = (positional.next() for _ in self.data_output)
-            parts.append(self.data_output.join().format(*parameters))
-            output.extend(self.data_output)
+        if data := self.data.data_output(table_alias):
+            parameters = (positional.next() for _ in data)
+            parts.append(data.join().format(*parameters))
+            output.extend(data)
 
         parts.append(f"VALUES ({ ", ".join(positional.next() for _ in first) })")
 
         returning = []
-        if self.data_returning is not None:
-            parameters = (positional.next() for _ in self.data_returning)
-            parts.append(self.data_returning.join().format(*parameters))
-            returning.extend(self.data_returning)
+        if data := self.data.data_returning(table_alias):
+            parameters = (positional.next() for _ in data)
+            parts.append(data.join().format(*parameters))
+            returning.extend(data)
 
         return (
             "\n".join(parts),
@@ -232,6 +237,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
         """Apply `VALUES ({ values })`  
         `.Values(T.users.id == 1, T.users.name == "Foo")`  
         `.Values(name="Bar", id=2)`"""
+        assert self.data.table is not None
         if not value and not columns:
             raise ValueError("At least one value is required on InsertMany().Values()")
 
@@ -239,7 +245,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
             [
                 *value,
                 *(
-                    ColumnEqualsValue(self.into.Column(column), "=", value)
+                    ColumnEqualsValue(self.data.table.Column(column), "=", value)
                     for column, value in columns.items()
                 )
             ],
@@ -248,11 +254,8 @@ class InsertMany (ExecutableStatement, SupportsReturning):
         names = [c.left.name for c in ordered]
 
         match self.data_values:
-            case []:
-                if len(names) != len(set(names)):
-                    raise ValueError(
-                        f"Duplicate names found on InsertMany().Values(): {names}"
-                    )
+            case [] if len(names) != len(set(names)):
+                raise ValueError(f"Duplicate names found on InsertMany().Values(): {names}")
 
             case [first, *_]:
                 expected = [c.left.name for c in first]

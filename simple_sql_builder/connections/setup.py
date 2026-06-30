@@ -8,7 +8,7 @@ from typing import Protocol, Any, Self, Iterator, Callable
 # internal
 from simple_sql_builder.parameters import *
 from simple_sql_builder.shared import SequenceAny, ManySequenceAny, MappingAny, SQLValue
-from simple_sql_builder.supports import ExecutableStatement, SupportParameter
+from simple_sql_builder.supports import ExecutableStatement, SupportParameters
 
 class ICursorPEP249 (Protocol):
     def __iter__ (self) -> Self: ...
@@ -145,11 +145,10 @@ class Cursor:
         except Exception: pass
 
     def execute (self, sql: str, params: SequenceAny | None = None, **kwargs) -> ResultSQL:
-        self.cursor = (
+        if not params:
             self.cursor.execute(sql, **kwargs)
-            if not params else
+        else:
             self.cursor.execute(sql, params, **kwargs)
-        )
 
         columns = self.columns
         rows = [row for row in self.cursor] if columns else []
@@ -159,10 +158,7 @@ class Cursor:
         return ResultSQL(rowcount, len(rows), columns, rows)
 
     def executemany (self, sql: str, params: ManySequenceAny, **kwargs) -> ResultSQL:
-        self.cursor = (
-            self.cursor.executemany(sql, params, **kwargs)
-            or self.cursor
-        )
+        self.cursor.executemany(sql, params, **kwargs)
 
         columns = self.columns
         rows = [row for row in self.cursor] if columns else []
@@ -177,7 +173,7 @@ class Cursor:
         self.close()
         return ResultSQL(rowcount, len(rows), columns, rows)
 
-class Connection (SupportParameter):
+class Connection (SupportParameters):
     """Wrapper to a driver Connection with support to `execute(statement)`
     - `IConnectionPEP249 => "DB API 2.0"` Interface to `commit` `rollback` `close` `Cursor`
     - `Connection(conn)` closing should be handled
@@ -221,7 +217,7 @@ class Connection (SupportParameter):
         - `kwargs` additional params `execute()` or `executemany()` accepts"""
         sql, params = (
             statement
-            .set_parameter(self.parameter, self.quote_info)
+            .set_parameter(self.data.parameter, self.data.quote_info)
             .to_sql()
         )
 
