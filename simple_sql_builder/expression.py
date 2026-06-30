@@ -6,10 +6,7 @@ from typing import (
     Iterable, Literal, NoReturn
 )
 # internal
-from simple_sql_builder.shared import (
-    DataSQL,
-    quote, indent,
-)
+from simple_sql_builder.shared import DataSQL, quote, indent
 
 type ExpOrValue  = Expression | Any
 type ExpOrString = Expression | str
@@ -20,17 +17,17 @@ OPERATORS_FOR_PARENTESIS = {
     "IN",  "/", "*"
 }
 
-def to_sql (value: object, *, table_alias=True) -> DataSQL:
+def to_sql (value: object, *, table_alias=True, quote_info: tuple[bool, str] | None = None) -> DataSQL:
     match value:
         case AbstractExpression():
-            return value.to_sql(table_alias=table_alias)
+            return value.to_sql(table_alias=table_alias, quote_info=quote_info)
 
         case list() | tuple() | set():
             all_params = []
             sqls_parts = list[str]()
 
             for item in value:
-                sql = to_sql(item, table_alias=table_alias)
+                sql = to_sql(item, table_alias=table_alias, quote_info=quote_info)
                 sqls_parts.append(str(sql))
                 all_params.extend(sql.params)
 
@@ -55,9 +52,10 @@ class AbstractExpression (ABC):
         return f"<{name} => {sql.params} {sql}>"
 
     @abstractmethod
-    def to_sql (self, *, table_alias=True) -> DataSQL:
+    def to_sql (self, *, table_alias=True, quote_info: tuple[bool, str] | None = None) -> DataSQL:
         """`SQL: Parameterized` as `(sql, params)`
         - `table_alias` used to remove the table alias from columns
+        - `quote_info` used as `enforce, char_quote` and `None` for `"` if contains space
         - Formatted as Python Positional Parameter `{}` to `self.values`"""
         ...
 
@@ -84,9 +82,9 @@ class OrderableExpression (AbstractExpression):
         return self
 
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         """`SQL: ({ Expression }) ASC|DESC [NULLS FIRST|LAST]` version"""
-        sql = to_sql(self.expression, table_alias=table_alias)
+        sql = to_sql(self.expression, table_alias=table_alias, quote_info=quote_info)
         params = sql.params
 
         sql = f"({ sql }) {self.order}"
@@ -99,6 +97,7 @@ class OrderableExpression (AbstractExpression):
         )
 
 class Expression (AbstractExpression):
+
     def __init__ (self, *values: Any) -> None:
         super().__init__(*values)
 
@@ -116,7 +115,7 @@ class Expression (AbstractExpression):
         """Create a `Expression` from a Literal `value`"""
         if isinstance(value, AbstractExpression):
             raise TypeError(
-                "Column.Value(value) should be a Literal Value not an Expression. "
+                "Expression.Value(value) should be a Literal Value not an Expression. "
                 "Consider using (Expression).As(alias)"
             )
         return LiteralExpression(value)
@@ -395,27 +394,31 @@ class AliasedExpression (Expression):
     """`Expression` with alias `AS`"""
 
     alias: str
-    """Quoted `alias`"""
+    expression: Expression
 
     def __init__ (self, expression: Expression, alias: str) -> None:
         super().__init__()
-        self.alias = quote(alias)
+        self.alias = alias
         self.expression = expression
 
+    def quote_alias (self, quote_info: tuple[bool, str] | None = None) -> str:
+        return quote(self.alias, quote_info)
+
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         """`SQL: ({ Expression }) AS {alias}`"""
-        sql = to_sql(self.expression, table_alias=table_alias)
-        return DataSQL(f"({ sql }) AS {self.alias}", sql.params)
+        alias = self.quote_alias(quote_info)
+        sql = to_sql(self.expression, table_alias=table_alias, quote_info=quote_info)
+        return DataSQL(f"({ sql }) AS {alias}", sql.params)
 
 class LiteralExpression (Expression):
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         return DataSQL("{}", self.params)
 
 class ConstantExpression (Expression):
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         return DataSQL(str(self.params[-1]), [])
 
 class ConcatExpression (Expression):
@@ -427,9 +430,9 @@ class ConcatExpression (Expression):
         self.char = char
 
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         sqls, params = [], []
-        generator = (to_sql(v, table_alias=table_alias) for v in self.params)
+        generator = (to_sql(v, table_alias=table_alias, quote_info=quote_info) for v in self.params)
 
         for sql in generator:
             sqls.extend(sql.sqls)
@@ -465,11 +468,11 @@ class CaseExpression (Expression):
         return self
 
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         if not self.data_cases:
             raise ValueError(f"Expression().Case().When() should be called at least once")
 
-        exp = to_sql(self.exp, table_alias=table_alias)
+        exp = to_sql(self.exp, table_alias=table_alias, quote_info=quote_info)
         sql = DataSQL(
             f"CASE {exp}"
             if self.exp is not E
@@ -478,15 +481,15 @@ class CaseExpression (Expression):
         )
 
         for when, then in self.data_cases:
-            when = to_sql(when, table_alias=table_alias)
-            then = to_sql(then, table_alias=table_alias)
+            when = to_sql(when, table_alias=table_alias, quote_info=quote_info)
+            then = to_sql(then, table_alias=table_alias, quote_info=quote_info)
             sql.extend(
                 f"WHEN {when} THEN {then}",
                 [*when, *then],
             )
 
         if self.default_case is NOT_SET:
-            sql.extend(to_sql(self.default_case, table_alias=table_alias))
+            sql.extend(to_sql(self.default_case, table_alias=table_alias, quote_info=quote_info))
 
         return sql
 
@@ -501,8 +504,8 @@ class CastExpression (Expression):
         self.as_type = as_type
 
     @override
-    def to_sql (self, *, table_alias=True) -> DataSQL:
-        sql = self.exp.to_sql(table_alias=table_alias)
+    def to_sql (self, *, table_alias=True, quote_info=None) -> DataSQL:
+        sql = self.exp.to_sql(table_alias=table_alias, quote_info=quote_info)
         return DataSQL(
             f"CAST({ sql } AS { self.as_type })",
             sql.params
@@ -517,12 +520,12 @@ class NamedFunctionExpression (Expression):
         self.name = name
 
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         all_params = []
         sql_parts = list[str]()
 
         for value in self.params:
-            sql = to_sql(value, table_alias=table_alias)
+            sql = to_sql(value, table_alias=table_alias, quote_info=quote_info)
             sql_parts.extend(sql.sqls)
             all_params.extend(sql)
 
@@ -539,8 +542,8 @@ class UnaryExpression (Expression):
         self.operator = operator
 
     @override
-    def to_sql (self, *, table_alias=True):
-        sql = to_sql(self.right, table_alias=table_alias)
+    def to_sql (self, *, table_alias=True, quote_info=None):
+        sql = to_sql(self.right, table_alias=table_alias, quote_info=quote_info)
         return DataSQL(
             f"{self.operator} ({ sql })"
             if self.operator in OPERATORS_FOR_PARENTESIS
@@ -557,9 +560,9 @@ class BinaryExpression (UnaryExpression):
         self.left = left
 
     @override
-    def to_sql (self, *, table_alias=True):
-        left = to_sql(self.left, table_alias=table_alias)
-        right = to_sql(self.right, table_alias=table_alias)
+    def to_sql (self, *, table_alias=True, quote_info=None):
+        left = to_sql(self.left, table_alias=table_alias, quote_info=quote_info)
+        right = to_sql(self.right, table_alias=table_alias, quote_info=quote_info)
         sql = (
             f"({left} {self.operator} {right})"
             if self.operator in OPERATORS_FOR_PARENTESIS
@@ -583,11 +586,11 @@ class SubqueryExpression (Expression):
         self.subquery = subquery
 
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         sql_parts, all_params = [], []
 
         if self.left is not None:
-            sql = to_sql(self.left, table_alias=table_alias)
+            sql = to_sql(self.left, table_alias=table_alias, quote_info=quote_info)
             sql_parts.extend(sql.sqls)
             all_params.extend(sql)
 
@@ -612,28 +615,29 @@ class BetweenExpression (Expression):
         self.high = high
 
     @override
-    def to_sql (self, *, table_alias=True):
-        exp, low, high = (to_sql(x, table_alias=table_alias)
+    def to_sql (self, *, table_alias=True, quote_info=None):
+        exp, low, high = (to_sql(x, table_alias=table_alias, quote_info=quote_info)
                           for x in (self.exp, self.low, self.high))
         sql = " ".join(( "(", str(exp), "BETWEEN", str(low), "AND", str(high), ")" ))
         return DataSQL(sql, [*exp, *low, *high])
 
 class EmptyExpression (Expression):
     @override    
-    def to_sql (self, *, table_alias=True) -> NoReturn:
+    def to_sql (self, *, table_alias=True, quote_info=None) -> NoReturn:
         raise NotImplementedError("Invalid use of E: EmptyExpression")
 
 E = EmptyExpression()
 """Build a `Expression` from a empty state
-#### A `Column` is a `Expression`
-<br>
+#### A `Column` can build `Expression`
+
+---
 
 ## Arithmetic `Expressions`
 `+ - * / %`
 
 ## Comparable `Expressions`
 **Operators** `==` `!=` `>` `<` `>=` `<=`  
-**Methods** `In()` `Like()` `ILike()` `Between()` `Case()`
+**Methods** `In()` `Exists()` `Like()` `ILike()` `Between()` `Case()`
 
 ## Logical `Expressions`
 **OR**  `(exp) | (exp)` `exp.Or(exp)`  

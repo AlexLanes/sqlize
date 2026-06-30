@@ -55,8 +55,11 @@ class PostgreSQL (C):
     def execute (self, statement: ExecutableStatement, **kwargs) -> ResultSQL:
         """Execute `SQL: Statement`
         - `kwargs` additional params `execute()` or `executemany()` accepts"""
-        statement.parameter = self.parameter
-        sql, params = statement.to_sql()
+        sql, params = (
+            statement
+            .set_parameter(self.parameter, self.quote_info)
+            .to_sql()
+        )
 
         cursor = self.cursor()
         if params and isinstance(params[0], (list, tuple)):

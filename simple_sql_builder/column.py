@@ -8,7 +8,7 @@ from simple_sql_builder.expression import (
     OrderableExpression, AliasedExpression
 )
 
-ESPECIAL_TABLES = {"old", "new", "inserted", "deleted"}
+ESPECIAL_TABLES = { "old", "new", "inserted", "deleted" }
 
 class OrderableColumn (OrderableExpression):
 
@@ -18,12 +18,12 @@ class OrderableColumn (OrderableExpression):
         super().__init__(order, self)
         self.column = column
 
-    def to_sql (self, *, table_alias=True) -> DataSQL:
+    def to_sql (self, *, table_alias=True, quote_info=None) -> DataSQL:
         """`SQL: (alias|ta.name) ASC|DESC [NULLS FIRST|LAST]` version"""
         name = (
-            self.column.alias
+            self.column.quote_alias(quote_info)
             if isinstance(self.column, AliasedColumn)
-            else self.column.to_sql(table_alias=table_alias).join()
+            else self.column.to_sql(table_alias=table_alias, quote_info=quote_info).join()
         )
         return DataSQL(
             f"{name} {self.order}"
@@ -35,21 +35,21 @@ class OrderableColumn (OrderableExpression):
 class AliasedColumn (AliasedExpression):
 
     alias: str
-    """Quoted `alias`"""
     column: Column | None
 
     def __init__ (self, column: Column | None, alias: str) -> None:
+        self.alias = alias
         self.column = column
         self.params = tuple()
-        self.alias = quote(alias)
 
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         """`SQL: [{Column} AS] {alias}`"""
+        alias = self.quote_alias(quote_info)
         if self.column is None:
-            return DataSQL(self.alias, [])
-        sql = self.column.to_sql(table_alias=table_alias)
-        return DataSQL(f"{sql.join()} AS {self.alias}", sql.params)
+            return DataSQL(alias, [])
+        sql = self.column.to_sql(table_alias=table_alias, quote_info=quote_info)
+        return DataSQL(f"{sql.join()} AS {alias}", sql.params)
 
     #-----------#
     # Orderable #
@@ -89,19 +89,23 @@ class Column (Expression):
     name: str
 
     def __init__ (self, name: str, table_alias: str) -> None:
+        self.name = name
         self.ta = table_alias
-        self.name = quote(name)
 
     def __hash__ (self) -> int:
         return hash((self.name, self.ta))
 
+    def quote_name (self, quote_info: tuple[bool, str] | None = None) -> str:
+        return quote(self.name, quote_info)
+
     @override
-    def to_sql (self, *, table_alias=True):
+    def to_sql (self, *, table_alias=True, quote_info=None):
         """`SQL: table_alias.name` version"""
+        name = self.quote_name(quote_info)
         return DataSQL(
-            f"{self.ta}.{self.name}"
+            f"{self.ta}.{name}"
             if table_alias or self.ta.lower() in ESPECIAL_TABLES
-            else self.name,
+            else name,
             []
         )
 

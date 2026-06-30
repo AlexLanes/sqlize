@@ -75,17 +75,17 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
             match value:
 
                 case ColumnEqualsValue():
-                    name = value.left.name
+                    name = value.left.quote_name(self.quote_info)
                     sets.append(f"{name} = {positional.next()}")
                     params.append(value.right)
 
                 case ColumnWithDefaultValue():
-                    name = value.column.name
+                    name = value.column.quote_name(self.quote_info)
                     sets.append(f"{name} = {value.to_sql().join()}")
 
                 case AliasedExpression():
-                    name = value.alias
-                    sql = to_sql(value.expression, table_alias=False)
+                    name = value.quote_alias(self.quote_info)
+                    sql = to_sql(value.expression, table_alias=False, quote_info=self.quote_info)
                     params.extend(sql)
                     parameterized = sql.join().format(*(positional.next() for _ in sql))
                     sets.append(f"{name} = {parameterized}")
@@ -121,7 +121,7 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
     @override
     def Where (self, expression: Expression) -> Self:
-        sql = expression.to_sql(table_alias=False)
+        sql = expression.to_sql(table_alias=False, quote_info=self.quote_info)
         sql.sqls.insert(0, "WHERE")
         self.data_where = sql
         return self

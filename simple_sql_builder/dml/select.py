@@ -251,7 +251,7 @@ class Select (Queryable, SupportsWhere):
             select_parts.append(sql_format("TOP ({})", [top]))
 
         # COLUMNS FROM
-        data = DataSQL.merge(x.to_sql() for x in self.data_columns)
+        data = DataSQL.merge(x.to_sql(quote_info=self.quote_info) for x in self.data_columns)
         all_params.extend(data)
         select_parts.append(sql_format(data.join(", "), data))
         sql_parts = [
@@ -332,7 +332,7 @@ class Select (Queryable, SupportsWhere):
         """Apply `INNER JOIN {table} ON {on}`
         - `Join(T.orders, T.orders.user_id == T.users.id)`"""
         self.data_joins.append(
-            ("INNER", table, on.to_sql())
+            ("INNER", table, on.to_sql(quote_info=self.quote_info))
         )
         return self
 
@@ -340,7 +340,7 @@ class Select (Queryable, SupportsWhere):
         """Apply `LEFT JOIN {table} ON {on}`
         - `LeftJoin(T.orders, T.orders.user_id == T.users.id)`"""
         self.data_joins.append(
-            ("LEFT", table, on.to_sql())
+            ("LEFT", table, on.to_sql(quote_info=self.quote_info))
         )
         return self
 
@@ -348,7 +348,7 @@ class Select (Queryable, SupportsWhere):
         """Apply `RIGHT JOIN {table} ON {on}`
         - `RightJoin(T.orders, T.orders.user_id == T.users.id)`"""
         self.data_joins.append(
-            ("RIGHT", table, on.to_sql())
+            ("RIGHT", table, on.to_sql(quote_info=self.quote_info))
         )
         return self
 
@@ -356,7 +356,7 @@ class Select (Queryable, SupportsWhere):
         """Apply `FULL JOIN {table} ON {on}`
         - `FullJoin(T.orders, T.orders.user_id == T.users.id)`"""
         self.data_joins.append(
-            ("FULL", table, on.to_sql())
+            ("FULL", table, on.to_sql(quote_info=self.quote_info))
         )
         return self
 
@@ -368,7 +368,7 @@ class Select (Queryable, SupportsWhere):
         """Apply `GROUP BY {expression, ...}`"""
         sql_parts, all_params = [], []
         for exp in expression:
-            sql = exp.to_sql()
+            sql = exp.to_sql(quote_info=self.quote_info)
             sql_parts.append(sql.join())
             all_params.extend(sql)
 
@@ -382,7 +382,7 @@ class Select (Queryable, SupportsWhere):
         """Apply `HAVING {expression, ...}`"""
         sql_parts, all_params = [], []
         for exp in expression:
-            sql = exp.to_sql()
+            sql = exp.to_sql(quote_info=self.quote_info)
             sql_parts.append(sql.join())
             all_params.extend(sql)
 

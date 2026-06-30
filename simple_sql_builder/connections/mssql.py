@@ -24,18 +24,18 @@ class MicrosoftSQL (C):
     def __init__ (self, connection_string: str, **kwargs: Any) -> None:
         kwargs = { "timeout": 5, **kwargs }
         self.conn = mssql_connect(connection_string, **kwargs)
-        self.set_parameter("?")
+        self.set_parameter("?", (False, "["))
 
     @classmethod
-    def Connect(cls, *, server: str = "localhost",
-                        database: str | None = "master",
-                        user: str | None = None,
-                        password: str | None = None,
-                        timeout: int = 5,
-                        encrypt: bool | None = None,
-                        trusted_connection: bool | None = None,
-                        trusted_server_certificate: bool | None = None,
-                        **kwargs: Any) -> "MicrosoftSQL":
+    def Connect (cls, *, server: str = "localhost",
+                         database: str | None = "master",
+                         user: str | None = None,
+                         password: str | None = None,
+                         timeout: int = 5,
+                         encrypt: bool | None = None,
+                         trusted_connection: bool | None = None,
+                         trusted_server_certificate: bool | None = None,
+                         **kwargs: Any) -> "MicrosoftSQL":
         connection = object.__new__(cls)
         bools = { None: None, True: "yes", False: "no" }
         connection_string = ";".join(
@@ -53,7 +53,7 @@ class MicrosoftSQL (C):
             if value is not None
         )
         connection.conn = mssql_connect(connection_string, timeout=timeout)
-        return connection.set_parameter("?")
+        return connection.set_parameter("?", (False, "["))
 
     def tables (self, schema: str | None = None) -> list[TableData]:
         """List Tables Data of Database"""

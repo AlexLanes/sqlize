@@ -148,9 +148,11 @@ class ConnectionODBC (C):
         """Execute `SQL: Statement`
         - `cursor.executemany()` is a `for` `cursor.execute()` loop due to limitation on `pyodbc`
         - `cursor.executemany()` auto rollback on `Exception`"""
-        statement.parameter = self.parameter
-        sql, params = statement.to_sql()
-        print(sql, params, sep='\n')
+        sql, params = (
+            statement
+            .set_parameter(self.parameter, self.quote_info)
+            .to_sql()
+        )
 
         cursor = self.cursor()
         if params and isinstance(params[0], (list, tuple)):

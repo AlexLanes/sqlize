@@ -9,13 +9,20 @@ from simple_sql_builder.column import Column, AliasedColumn
 
 class SupportParameter:
 
+    quote_info: tuple[bool, str] | None = None
+    """Used as `enforce, char_quote` and `None` for `"` if contains space"""
     parameter = POSITIONAL_PARAMETERS["?"]
     """Positional Parameter
     - `Default: ?`"""
 
-    def set_parameter (self, positional: Positionals) -> Self:
-        """Change `PositionalParameter`
-        - `Default: ?`"""
+    def set_parameter (self, positional: Positionals | type[IPositionalParameter],
+                             quote_info: tuple[bool, str] | None = None) -> Self:
+        """Change `PositionalParameter` and `quote_info`"""
+        self.quote_info = quote_info
+
+        if not isinstance(positional, str):
+            self.parameter = positional
+            return self
         if p := POSITIONAL_PARAMETERS.get(positional):
             self.parameter = p
             return self
@@ -49,7 +56,8 @@ class SupportsWhere:
         `Where( (users.role == "admin").Not() )`  
         `Where( (users.role == "admin") & (users.name != None) )`  
         """
-        sql = expression.to_sql()
+        info = self.quote_info if isinstance(self, SupportParameter) else None
+        sql = expression.to_sql(quote_info=info)
         sql.sqls.insert(0, "WHERE")
         self.data_where = sql
         return self
@@ -77,8 +85,10 @@ class SupportsOrderBy:
         ```
         """
         sqls, params = [], []
+        info = self.quote_info if isinstance(self, SupportParameter) else None
+
         for order in orderable:
-            sql = order.to_sql()
+            sql = order.to_sql(quote_info=info)
             sqls.append(sql.join())
             params.extend(sql)
 
@@ -180,11 +190,13 @@ class SupportsReturning:
             return self
 
         sqls, params = [], []
+        info = self.quote_info if isinstance(self, SupportParameter) else None
+
         for column in columns:
             if isinstance(column, str):
-                sqls.append(quote(column))
+                sqls.append(quote(column, info))
             else:
-                sql = column.to_sql(table_alias=False)
+                sql = column.to_sql(table_alias=False, quote_info=info)
                 sqls.append(sql.join())
                 params.extend(sql)
 
@@ -205,11 +217,13 @@ class SupportsReturning:
             return self
 
         sqls, params = [], []
+        info = self.quote_info if isinstance(self, SupportParameter) else None
+
         for column in columns:
             if isinstance(column, str):
-                sqls.append(quote(column))
+                sqls.append(quote(column, info))
             else:
-                sql = column.to_sql(table_alias=False)
+                sql = column.to_sql(table_alias=False, quote_info=info)
                 sqls.append(sql.join())
                 params.extend(sql)
 

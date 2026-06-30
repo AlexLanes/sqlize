@@ -7,7 +7,7 @@ from datetime import datetime, date, time
 from typing import Protocol, Any, Self, Iterator, Callable
 # internal
 from simple_sql_builder.parameters import *
-from simple_sql_builder.shared import SequenceAny, ManySequenceAny, MappingAny
+from simple_sql_builder.shared import SequenceAny, ManySequenceAny, MappingAny, SQLValue
 from simple_sql_builder.supports import ExecutableStatement, SupportParameter
 
 class ICursorPEP249 (Protocol):
@@ -62,7 +62,7 @@ class ResultSQL:
         """First row returned or `{}` if empty"""
         return next(self.__iter__()) if self.rows else {}
 
-    def transform (self, **funcs: Callable[[Any], Any]) -> Self:
+    def transform (self, **funcs: Callable[[SQLValue], SQLValue]) -> Self:
         """Transform values of columns with custom function `column_name = (value) -> value`
         - `result.transform(name = lambda value: str(value).upper())`"""
         if not funcs:
@@ -185,7 +185,7 @@ class Connection (SupportParameter):
 
     def __init__ (self, conn: IConnectionPEP249) -> None:
         self.conn = conn
-        self.set_parameter(guess_driver_parameter(conn))
+        self.set_parameter(*guess_driver_parameter(conn))
 
     def __repr__ (self) -> str:
         name = (
@@ -219,8 +219,11 @@ class Connection (SupportParameter):
         - Type of `PositionalParameter` guessed on `init` by `conn` name
             - `set_parameter()` to manually set
         - `kwargs` additional params `execute()` or `executemany()` accepts"""
-        statement.parameter = self.parameter
-        sql, params = statement.to_sql()
+        sql, params = (
+            statement
+            .set_parameter(self.parameter, self.quote_info)
+            .to_sql()
+        )
 
         cursor = self.cursor()
         if params and isinstance(params[0], (list, tuple)):

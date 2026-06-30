@@ -2,9 +2,8 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import (
-    Any, Self,
-    Iterable, Sequence, Mapping,
-    overload
+    Any, Self, overload,
+    Iterable, Sequence, Mapping
 )
 
 type SQLValue = object
@@ -12,9 +11,18 @@ type SequenceAny = Sequence[Any]
 type MappingAny = Mapping[str, Any]
 type ManySequenceAny = Sequence[SequenceAny]
 
-def quote (s: str) -> str:
-    """Quote `s` if contains space"""
-    return f'"{s}"' if " " in s else s
+def quote (s: str, quote_info: tuple[bool, str] | None = None) -> str:
+    """Quote `s` depending on `quote_info`
+    - `quote_info` used as `enforce, char_quote` and `None` for `"` if contains space"""
+    if s == "*":
+        return s
+
+    if quote_info is None:
+        return f'"{s}"' if " " in s else s
+
+    enforce, char = quote_info
+    if char == "[": return f"[{s}]" if enforce or " " in s else s
+    return f"{char}{s}{char}" if enforce or " " in s else s
 
 def indent (sql: str) -> str:
     """Indent lines do `sql` by 4 spaces"""

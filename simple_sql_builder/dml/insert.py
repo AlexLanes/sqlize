@@ -100,16 +100,16 @@ class InsertOne (ExecutableStatement, SupportsReturning):
             match value:
 
                 case ColumnEqualsValue():
-                    columns.append(value.left.name)
+                    columns.append(value.left.quote_name(self.quote_info))
                     values.append(positional.next())
                     params.append(value.right)
 
                 case ColumnWithDefaultValue():
-                    columns.append(value.column.name)
+                    columns.append(value.column.quote_name(self.quote_info))
                     values.append(value.to_sql().join())
 
                 case AliasedExpression():
-                    columns.append(value.alias)
+                    columns.append(value.quote_alias(self.quote_info))
                     sql = to_sql(value.expression, table_alias=False)
                     parameters = (positional.next() for _ in sql)
                     values.append(sql.join().format(*parameters))
@@ -199,7 +199,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
         positional = self.parameter()
         parts = [
             f"INSERT INTO {self.into.to_table_name()}",
-            f"({ ", ".join(v.left.name for v in first) })",
+            f"({ ", ".join(c.left.quote_name(self.quote_info) for c in first) })",
         ]
 
         output = []

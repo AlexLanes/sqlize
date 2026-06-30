@@ -33,46 +33,47 @@ POSITIONAL_PARAMETERS: dict[str, type[IPositionalParameter]] = {
     ":N": ColonNumberPositional
 }
 
-DB_DRIVER_PARAMSTYLE: dict[str, Positionals] = {
+DB_DRIVER_PARAMSTYLE: dict[str, tuple[Positionals, tuple[bool, str] | None]] = {
     # SQLite
-    "sqlite3": "?",
+    "sqlite3":   ("?", None),
     # ODBC
-    "pyodbc": "?",
+    "pyodbc":    ("?", None),
     # PostgreSQL
-    "psycopg2": "%s",
-    "psycopg": "%s",
-    "pg8000": "%s",
+    "psycopg2":  ("%s", None),
+    "psycopg":   ("%s", None),
+    "pg8000":    ("%s", None),
     # MySQL / MariaDB
-    "mysqldb": "%s",
-    "pymysql": "%s",
-    "mariadb": "?",
+    "mysqldb":   ("%s", (False, "`")),
+    "pymysql":   ("%s", (False, "`")),
+    "mariadb":   ("?",  (False, "`")),
     # SQL Server
-    "pymssql": "%s",
+    "pymssql":   ("%s", (False, "[")),
     # Oracle
-    "oracledb": ":N",
-    "cx_oracle": ":N",
+    "oracledb":  (":N", (True, '"')),
+    "cx_oracle": (":N", (True, '"')),
     # DuckDB
-    "duckdb": "?",
+    "duckdb":    ("?", None),
 }
 
-def guess_driver_parameter (driver: object) -> Positionals:
+def guess_driver_parameter (driver: object) -> tuple[Positionals, tuple[bool, str] | None]:
     module_name = driver.__class__.__module__.lower().strip()
-    if p := DB_DRIVER_PARAMSTYLE.get(module_name):
-        return p
+    if parameter := DB_DRIVER_PARAMSTYLE.get(module_name):
+        return parameter
 
     name = module_name + driver.__class__.__name__.lower().strip()
-    guesses: list[tuple[str, Literal["?", "%s", ":N"]]] = [
-        ("oracle", ":N"),
-        ("mysql", "%s"),
-        ("pg", "%s")
+    guesses = [
+        ("oracle", ":N", (True, '"')),
+        ("mysql", "%s", (False, "`")),
+        ("pg", "%s", (False, '"')),
     ]
 
-    for db, p in guesses:
-        if db in name: return p
-    return "?"
+    for db_db, parameter, quote_info in guesses:
+        if db_db in name: return (parameter, quote_info) # type: ignore
+    return ("?", None)
 
 __all__ = [
     "Positionals",
+    "IPositionalParameter",
     "POSITIONAL_PARAMETERS",
     "guess_driver_parameter",
 ]

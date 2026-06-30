@@ -57,7 +57,6 @@ class Upsert (SupportsReturning, SupportParameter):
             update = Update(self.table).Set(*self.data_matched).Where(self.data_on)
             update.data_returning = self.data_returning
             update.data_output = self.data_output
-            update.parameter = self.parameter
             result = conn.execute(update)
             if 1 in (result.rowcount, result.returned): return (True, result)
             assert not result, (
@@ -73,7 +72,6 @@ class Upsert (SupportsReturning, SupportParameter):
             insert = InsertOne(into=self.table).Values(*self.data_not_matched)
             insert.data_returning = self.data_returning
             insert.data_output = self.data_output
-            insert.parameter = self.parameter
             result = conn.execute(insert)
             assert 1 in (result.rowcount, result.returned), (
                 "Upsert().execute() did not match any row to Update "

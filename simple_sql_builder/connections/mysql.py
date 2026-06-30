@@ -61,7 +61,7 @@ class MySQL (C):
             connect_timeout=connect_timeout,
             **kwargs,
         )
-        self.set_parameter("%s")
+        self.set_parameter("%s", (False, "`"))
 
     def tables (self, schema: str | None = None) -> list[TableData]:
         """List Tables Data of Database"""
