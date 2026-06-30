@@ -4,7 +4,7 @@ from typing import Any, Literal, override, overload
 # internal
 from simple_sql_builder.shared import quote, DataSQL
 from simple_sql_builder.expression import (
-    Expression, BinaryExpression, ConstantExpression,
+    Expression, BinaryExpression, LiteralExpression,
     OrderableExpression, AliasedExpression
 )
 
@@ -75,7 +75,7 @@ class ColumnEqualsValue (BinaryExpression):
             raise ValueError("ColumnEqualsValue expects Literal Values, not Expression")
         super().__init__(left, operator, right)
 
-class ColumnWithDefaultValue (ConstantExpression):
+class ColumnWithDefaultValue (LiteralExpression):
 
     column: Column
 
@@ -89,6 +89,7 @@ class Column (Expression):
     name: str
 
     def __init__ (self, name: str, table_alias: str) -> None:
+        super().__init__()
         self.name = name
         self.ta = table_alias
 
@@ -119,7 +120,10 @@ class Column (Expression):
     def __eq__ (self, other: object) -> ColumnEqualsValue: ...
     @override
     def __eq__ (self, other: Expression | Any) -> BinaryExpression | ColumnEqualsValue:
-        operator = "IS" if other is None else "="
+        match other:
+            case None: operator = "IS"
+            case LiteralExpression(): operator = "IS"
+            case _: operator = "="
         cls = BinaryExpression if isinstance(other, Expression) else ColumnEqualsValue
         return cls(self, operator, other)
 

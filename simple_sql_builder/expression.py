@@ -196,16 +196,24 @@ class Expression (AbstractExpression):
     #-----------------------#
 
     def __eq__ (self, other: ExpOrValue) -> Expression: # type: ignore
-        """Apply `self = {other}`"""
-        if other is None:
-            return BinaryExpression(self, "IS", None)
-        return BinaryExpression(self, "=", other)
+        """Apply `self = {other}` or `self IS {other}` on `None` `E.Literal()` `E.LITERAL`"""
+        match other:
+            case None:
+                return BinaryExpression(self, "IS", None)
+            case LiteralExpression():
+                return BinaryExpression(self, "IS", other)
+            case _:
+                return BinaryExpression(self, "=", other)
 
     def __ne__ (self, other: ExpOrValue) -> Expression: # type: ignore
-        """Apply `self != {other}`"""
-        if other is None:
-            return BinaryExpression(self, "IS NOT", None)
-        return BinaryExpression(self, "!=", other)
+        """Apply `self != {other}` or `self IS NOT {other}` on `None` `E.Literal()` `E.LITERAL`"""
+        match other:
+            case None:
+                return BinaryExpression(self, "IS NOT", None)
+            case LiteralExpression():
+                return BinaryExpression(self, "IS NOT", other)
+            case _:
+                return BinaryExpression(self, "!=", other)
 
     def __gt__ (self, other: ExpOrValue) -> Expression:
         """Apply `self > {other}`"""
@@ -275,27 +283,27 @@ class Expression (AbstractExpression):
     @property
     def CURRENT_DATE (self) -> Expression:
         """Constant `CURRENT_DATE`"""
-        return ConstantExpression("CURRENT_DATE")
+        return LiteralExpression("CURRENT_DATE")
 
     @property
     def CURRENT_TIME (self) -> Expression:
         """Constant `CURRENT_TIME`"""
-        return ConstantExpression("CURRENT_TIME")
+        return LiteralExpression("CURRENT_TIME")
 
     @property
     def CURRENT_TIMESTAMP (self) -> Expression:
         """Constant `CURRENT_TIMESTAMP`"""
-        return ConstantExpression("CURRENT_TIMESTAMP")
+        return LiteralExpression("CURRENT_TIMESTAMP")
 
     @property
     def LOCAL_TIME (self) -> Expression:
         """Constant `LOCALTIME`"""
-        return ConstantExpression("LOCALTIME")
+        return LiteralExpression("LOCALTIME")
 
     @property
     def LOCAL_TIMESTAMP (self) -> Expression:
         """Constant `LOCALTIMESTAMP`"""
-        return ConstantExpression("LOCALTIMESTAMP")
+        return LiteralExpression("LOCALTIMESTAMP")
 
     #-----------#
     # Functions #
@@ -433,11 +441,6 @@ class ValueExpression (Expression):
         return DataSQL("{}", self.params)
 
 class LiteralExpression (Expression):
-    @override
-    def to_sql (self, *, table_alias=True, quote_info=None):
-        return DataSQL(f"{self.params[0]}", [])
-
-class ConstantExpression (Expression):
     @override
     def to_sql (self, *, table_alias=True, quote_info=None):
         return DataSQL(str(self.params[-1]), [])
@@ -683,8 +686,8 @@ class EmptyExpression (Expression):
     def to_sql (self, *, table_alias=True, quote_info=None) -> NoReturn:
         raise NotImplementedError("Invalid use of E: EmptyExpression")
 
-    def __getattr__ (self, name: str) -> ConstantExpression:
-        return ConstantExpression(name)
+    def __getattr__ (self, name: str) -> LiteralExpression:
+        return LiteralExpression(name)
 
 E = EmptyExpression()
 """Build a `Expression` from a empty state
