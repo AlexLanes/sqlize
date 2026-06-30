@@ -6,7 +6,7 @@ from typing import (
     Iterable, Literal, NoReturn
 )
 # internal
-from simple_sql_builder.shared import DataSQL, quote, indent
+from simple_sql_builder.shared import DataSQL, quote, indent, SQLValue
 
 type ExpOrValue  = Expression | Any
 type ExpOrString = Expression | str
@@ -107,18 +107,34 @@ class Expression (AbstractExpression):
             "Consider using .Not() for negation"
         )
 
-    #---------------#
-    # AliasedColumn #
-    #---------------#
+    #--------#
+    # Values #
+    #--------#
 
-    def Value (self, value: Any) -> LiteralExpression:
-        """Create a `Expression` from a Literal `value`"""
+    def Literal (self, value: SQLValue) -> LiteralExpression:
+        """Create a `Expression` from Literal `value`"""
+        match value:
+            case AbstractExpression(): raise TypeError(
+                "Expression.Literal(value) should be a Literal value not an Expression. "
+                "Consider using (Expression).As(alias)"
+            )
+            case None: return LiteralExpression("NULL")
+            case int() | float(): return LiteralExpression(value)
+            case bool(): return LiteralExpression("TRUE" if value else "FALSE")
+            case _: return LiteralExpression(str(value))
+
+    def Value (self, value: Any) -> ValueExpression:
+        """Create a Parameterized `Expression` from `value`"""
         if isinstance(value, AbstractExpression):
             raise TypeError(
                 "Expression.Value(value) should be a Literal Value not an Expression. "
                 "Consider using (Expression).As(alias)"
             )
-        return LiteralExpression(value)
+        return ValueExpression(value)
+
+    #---------------#
+    # AliasedColumn #
+    #---------------#
 
     def As (self, alias: str) -> AliasedExpression:
         """Apply `({ Expression }) AS {alias}` to `Select()` as a Column
@@ -411,15 +427,57 @@ class AliasedExpression (Expression):
         sql = to_sql(self.expression, table_alias=table_alias, quote_info=quote_info)
         return DataSQL(f"({ sql }) AS {alias}", sql.params)
 
-class LiteralExpression (Expression):
+class ValueExpression (Expression):
     @override
     def to_sql (self, *, table_alias=True, quote_info=None):
         return DataSQL("{}", self.params)
+
+class LiteralExpression (Expression):
+    @override
+    def to_sql (self, *, table_alias=True, quote_info=None):
+        return DataSQL(f"{self.params[0]}", [])
 
 class ConstantExpression (Expression):
     @override
     def to_sql (self, *, table_alias=True, quote_info=None):
         return DataSQL(str(self.params[-1]), [])
+
+    def __call__ (self, *values: ExpOrValue, sep=", ", paren=True) -> DynamicExpression:
+        return DynamicExpression(
+            str(self.params[-1]),
+            *values,
+            sep = sep,
+            paren = paren
+        )
+
+class DynamicExpression (Expression):
+
+    name: str
+    separator: str
+    parenthesis: bool
+
+    def __init__ (self, name: str, *values: ExpOrValue, sep: str, paren: bool) -> None:
+        super().__init__(*values)
+        self.name = name
+        self.separator = sep
+        self.parenthesis = paren
+
+    @override
+    def to_sql (self, *, table_alias=True, quote_info=None):
+        all_params = []
+        sql_parts = list[str]()
+
+        for value in self.params:
+            sql = to_sql(value, table_alias=table_alias, quote_info=quote_info)
+            sql_parts.extend(sql.sqls)
+            all_params.extend(sql)
+
+        sql = self.separator.join(sql_parts)
+        return (
+            DataSQL(f"{self.name}({ sql })", all_params)
+            if self.parenthesis
+            else DataSQL(f"{self.name} {sql}", all_params)
+        )
 
 class ConcatExpression (Expression):
 
@@ -432,11 +490,10 @@ class ConcatExpression (Expression):
     @override
     def to_sql (self, *, table_alias=True, quote_info=None):
         sqls, params = [], []
-        generator = (to_sql(v, table_alias=table_alias, quote_info=quote_info) for v in self.params)
-
-        for sql in generator:
-            sqls.extend(sql.sqls)
-            params.extend(sql)
+        for param in self.params:
+            data = to_sql(param, table_alias=table_alias, quote_info=quote_info)
+            sqls.extend(data.sqls)
+            params.extend(data)
 
         return DataSQL(
             f" {self.char} ".join(sqls),
@@ -626,6 +683,9 @@ class EmptyExpression (Expression):
     def to_sql (self, *, table_alias=True, quote_info=None) -> NoReturn:
         raise NotImplementedError("Invalid use of E: EmptyExpression")
 
+    def __getattr__ (self, name: str) -> ConstantExpression:
+        return ConstantExpression(name)
+
 E = EmptyExpression()
 """Build a `Expression` from a empty state
 #### A `Column` can build `Expression`
@@ -644,7 +704,7 @@ E = EmptyExpression()
 **AND** `(exp) & (exp)` `exp.And(exp)`  
 **NOT** `exp.Not()`
 
-## Functions `Expressions`
+## Function `Expressions`
 `Upper()` `Lower()` `Length()` `Trim()`   
 `Substring()` `Coalesce()` `Replace()` `Concat()`  
 `Abs()` `Ceil()` `Floor()` `Round()`
@@ -654,9 +714,14 @@ E = EmptyExpression()
 `Min()` `Max()`  
 `Sum()` `Avg()`
 
-## Constants `Expression`
+## Constant `Expression`
 `CURRENT_DATE` `CURRENT_TIME` `CURRENT_TIMESTAMP`  
 `LOCAL_TIME` `LOCAL_TIMESTAMP`
+
+## Dynamic `Expression`
+`E.NAME`  
+`E.NAME(*args, sep=, paren=)`  
+Combine with `E.Value()` `E.Literal()`
 """
 
 # Avoids Circular Reference
