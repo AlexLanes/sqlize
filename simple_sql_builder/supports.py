@@ -149,7 +149,8 @@ class SupportsPaging (SupportsData):
 
     def Limit (self, value: int | None) -> Self:
         """Apply `LIMIT {value}`
-        - `None` do nothing"""
+        - `None` do nothing
+        #### Supported By: `SQLite` `PostgreSQL` `MySQL`"""
         if value is None:
             return self
         if value <= 0:
@@ -159,7 +160,8 @@ class SupportsPaging (SupportsData):
 
     def Offset (self, value: int | None) -> Self:
         """Apply `OFFSET {value}`
-        - `None` do nothing"""
+        - `None` do nothing
+        #### Supported By: `SQLite` `PostgreSQL` `MySQL`"""
         if value is None:
             return self
         if value < 0:
@@ -169,7 +171,8 @@ class SupportsPaging (SupportsData):
 
     def OffsetRows (self, value: int | None) -> Self:
         """Apply `OFFSET {value} ROWS`
-        - `None` do nothing"""
+        - `None` do nothing
+        #### Supported By: `PostgreSQL` `Oracle` `MicrosoftSQL`"""
         if value is None:
             return self
         if value < 0:
@@ -179,7 +182,8 @@ class SupportsPaging (SupportsData):
 
     def FetchNextRowsOnly (self, value: int | None) -> Self:
         """Apply `FETCH NEXT {value} ROWS ONLY`
-        - `None` do nothing"""
+        - `None` do nothing
+        #### Supported By: `PostgreSQL` `Oracle` `MicrosoftSQL`"""
         if value is None:
             return self
         if value <= 0:
@@ -189,7 +193,8 @@ class SupportsPaging (SupportsData):
 
     def FetchFirstRowsOnly (self, value: int | None) -> Self:
         """Apply `FETCH FIRST {value} ROWS ONLY`
-        - `None` do nothing"""
+        - `None` do nothing
+        #### Supported By: `PostgreSQL` `Oracle`"""
         if value is None:
             return self
         if value <= 0:
@@ -203,21 +208,21 @@ class SupportsReturning (SupportsData):
         super().__init__()
 
     def Returning (self, *columns: str | Column | AliasedColumn | AliasedExpression) -> Self:
-        """Apply `RETURNING {Columns}`  
+        """Apply `RETURNING {Columns}`
+        #### Supported By: `SQLite` `PostgreSQL`
         `.Returning("*")`  
         `.Returning(A.All())`  
         `.Returning(T.users.All())`  
         `.Returning(T.users.id, A.name, "last_name")`  
         `.Returning(A.first_name.Concat(A.last_name).As("full_name"))`
-        ## PostgreSQL
+        ### PostgreSQL
         `.Returning(T.old.name.As("old_name"), T.new.name.As("new_name"))`"""
         self.data.returning.extend(columns)
         return self
 
     def Output (self, *columns: str | Column | AliasedColumn | AliasedExpression) -> Self:
-        """Apply `OUTPUT {Columns}`  
-        `.Output("*")`  
-        `.Output(A.All())`  
+        """Apply `OUTPUT {Columns}`
+        #### Supported By: `MicrosoftSQL`
         `.Output(T.inserted.All())`  
         `.Output(T.deleted.name.As("old_name"), T.inserted.name.As("new_name"))`"""
         self.data.output.extend(columns)

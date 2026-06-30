@@ -155,7 +155,8 @@ class InsertOne (ExecutableStatement, SupportsReturning):
         return self
 
     def DefaultValues (self) -> InsertDefaultValues:
-        """Apply `DEFAULT VALUES`"""
+        """Apply `INSERT INTO {table} DEFAULT VALUES`
+        #### Supported By: `SQLite` `PostgreSQL` `MicrosoftSQL`"""
         assert self.data.table is not None
         return InsertDefaultValues(self.data.table)
 

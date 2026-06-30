@@ -353,7 +353,8 @@ class Select (Queryable, SupportsWhere):
 
     def Top (self, rows: int | None) -> Self:
         """Apply `TOP {rows}`
-        - `None` do nothing"""
+        - `None` do nothing
+        #### Supported By: `MicrosoftSQL`"""
         if rows is None:
             return self
         if rows <= 0:
