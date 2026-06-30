@@ -17,6 +17,11 @@ class MyCursor (Cursor):
 
     cursor: pymysql_Cursor
 
+    @property
+    def inserted_id (self) -> int | None:
+        """First `AUTO_INCREMENT` value after an `INSERT`"""
+        return self.cursor.lastrowid or None
+
     @override
     def execute (self, sql: str, params: SequenceAny | None = None, **kwargs) -> ResultSQL:
         self.cursor.execute(sql, params)
@@ -62,6 +67,11 @@ class MySQL (C):
             **kwargs,
         )
         self.set_parameter("%s", (False, "`"))
+
+    @property
+    def inserted_id (self) -> int | None:
+        """First `AUTO_INCREMENT` value after an `INSERT`"""
+        return self.conn.insert_id() or None
 
     def tables (self, schema: str | None = None) -> list[TableData]:
         """List Tables Data of Database"""
