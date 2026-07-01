@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 
 [project.optional-dependencies]
 odbc = ["pyodbc"]
-mysql = ["PyMySQL"]
+mysql = ["mysql-connector-python"]
 mssql = ["mssql-python"]
 oracle = ["oracledb"]
 postgresql = ["psycopg[binary]"]

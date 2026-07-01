@@ -1,4 +1,4 @@
-"""`Connection` for `MySQL` database using external `PyMySQL`
+"""`Connection` for `MySQL` database using external `mysql-connector-python`
 ## Optional dependency `[mysql]` needed"""
 
 # std
@@ -8,48 +8,56 @@ from simple_sql_builder.shared import SequenceAny, TableData, ColumnData
 from simple_sql_builder.connections.setup import Connection as C, Cursor
 # external
 try:
-    from pymysql import connect as pymysql_connect, Connection as pymysql_Connection
-    from pymysql.cursors import Cursor as pymysql_Cursor
+    from mysql.connector import connect
+    from mysql.connector.cursor import MySQLCursor as cursor
+    from mysql.connector.connection import MySQLConnection as connection
 except ImportError:
     raise ImportError("Optional dependency [mysql] needed to use 'simple_sql_builder.connections.mysql'")
 
 class MyCursor (Cursor):
 
-    cursor: pymysql_Cursor
+    cursor: cursor
+
+    @override
+    def close (self) -> None:
+        setattr(MySQL, "_lastrowid", self.lastrowid)
+        return super().close()
 
     @property
-    def inserted_id (self) -> int | None:
-        """First `AUTO_INCREMENT` value after an `INSERT`"""
+    def lastrowid (self) -> int | None:
+        """First `AUTO_INCREMENT` value after an `INSERT` or `UPDATE`"""
         return self.cursor.lastrowid or None
 
 class MySQL (C):
     """`Connection` for `MySQL` database using external `PyMySQL`
     - `MySQL(host=..., user=..., password=..., database=...)`"""
 
-    conn: pymysql_Connection
+    conn: connection
 
     def __init__ (self, *, host: str = "localhost",
-                          port: int = 3306,
-                          user: str | None = None,
-                          password: str | None = None,
-                          database: str | None = None,
-                          connect_timeout: int = 5,
-                          **kwargs: Any) -> None:
-        self.conn = pymysql_connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password or "",
-            database=database,
-            connect_timeout=connect_timeout,
+                           port: int = 3306,
+                           user: str | None = None,
+                           password: str | None = None,
+                           database: str | None = None,
+                           connect_timeout: int = 5,
+                           **kwargs: Any) -> None:
+        conn = connect(
+            host = host,
+            port = port,
+            user = user,
+            password = password or "",
+            database = database,
+            connect_timeout = connect_timeout,
             **kwargs,
         )
+        assert isinstance(conn, connection), "Pool of MySQL not supported"
+        self.conn = conn
         self.set_parameter("%s", (False, "`"))
 
     @property
-    def inserted_id (self) -> int | None:
-        """First `AUTO_INCREMENT` value after an `INSERT`"""
-        return self.conn.insert_id() or None
+    def lastrowid (self) -> int | None:
+        """First `AUTO_INCREMENT` value after an `INSERT` or `UPDATE`"""
+        return getattr(MySQL, "_lastrowid", None)
 
     def tables (self, schema: str | None = None) -> list[TableData]:
         """List Tables Data of Database"""
