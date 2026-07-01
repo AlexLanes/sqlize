@@ -3,11 +3,11 @@ from typing import Self, Protocol
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 # internal
-from simple_sql_builder.parameters import *
-from simple_sql_builder.shared import SequenceAny, ManySequenceAny, DataSQL, quote
-from simple_sql_builder.expression import Expression, OrderableExpression, AliasedExpression
-from simple_sql_builder.column import Column, AliasedColumn
-from simple_sql_builder.table import Table
+from pysqlbuilder.parameters import *
+from pysqlbuilder.shared import SequenceAny, ManySequenceAny, DataSQL, quote
+from pysqlbuilder.expression import Expression, OrderableExpression, AliasedExpression
+from pysqlbuilder.column import Column, AliasedColumn
+from pysqlbuilder.table import Table
 
 @dataclass
 class Data:

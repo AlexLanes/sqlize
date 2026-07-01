@@ -2,8 +2,8 @@
 from __future__ import annotations
 from typing import Any, Literal, override, overload
 # internal
-from simple_sql_builder.shared import quote, DataSQL
-from simple_sql_builder.expression import (
+from pysqlbuilder.shared import quote, DataSQL
+from pysqlbuilder.expression import (
     Expression, BinaryExpression, LiteralExpression,
     OrderableExpression, AliasedExpression, E
 )

@@ -8,8 +8,8 @@ from sqlite3 import (
     Connection as sq3_Connection
 )
 # internal
-from simple_sql_builder.shared import TableData, ColumnData
-from simple_sql_builder.connections import Connection as C
+from pysqlbuilder.shared import TableData, ColumnData
+from pysqlbuilder.connections import Connection as C
 
 class SQLite (C):
     """`Connection` for `SQLite` database using stdlib `sqlite3`

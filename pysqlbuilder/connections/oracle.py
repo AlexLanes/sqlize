@@ -5,12 +5,12 @@
 from __future__ import annotations
 from typing import Any
 # internal
-from simple_sql_builder.shared import TableData, ColumnData
-from simple_sql_builder.connections.setup import Connection as C
+from pysqlbuilder.shared import TableData, ColumnData
+from pysqlbuilder.connections.setup import Connection as C
 # external
 try: import oracledb
 except ImportError:
-    raise ImportError("Optional dependency [oracle] needed to use 'simple_sql_builder.connections.oracle'")
+    raise ImportError("Optional dependency [oracle] needed to use 'pysqlbuilder.connections.oracle'")
 
 class Oracle (C):
     """`Connection` for `Oracle Database` using external `oracledb`

@@ -4,16 +4,16 @@
 # std
 from typing import Any, override
 # internal
-from simple_sql_builder.shared import SequenceAny, TableData, ColumnData
-from simple_sql_builder.supports import ExecutableStatement
-from simple_sql_builder.connections import Connection as C, ResultSQL
+from pysqlbuilder.shared import SequenceAny, TableData, ColumnData
+from pysqlbuilder.supports import ExecutableStatement
+from pysqlbuilder.connections import Connection as C, ResultSQL
 # external
 try: from psycopg import (
     connect as psycopg_connect,
     Connection as psycopg_Connection
 )
 except ImportError:
-    raise ImportError("Optional dependency [postgresql] needed to use 'simple_sql_builder.connections.postgresql'")
+    raise ImportError("Optional dependency [postgresql] needed to use 'pysqlbuilder.connections.postgresql'")
 
 class PostgreSQL (C):
     """`Connection` for `PostgreSQL` database using external `psycopg[binary]`

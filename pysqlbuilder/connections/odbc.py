@@ -4,11 +4,11 @@
 # std
 from typing import Any, override
 # internal
-from simple_sql_builder.shared import (
+from pysqlbuilder.shared import (
     TableData, ColumnData,
     ManySequenceAny, SequenceAny,
 )
-from simple_sql_builder.connections.setup import (
+from pysqlbuilder.connections.setup import (
     Connection as C,
     Cursor, ResultSQL,
     ExecutableStatement
@@ -21,7 +21,7 @@ try: from pyodbc import (
 )
 except ImportError: raise ImportError(
     "Optional dependency [odbc] needed to use "
-    "'simple_sql_builder.connections.odbc'"
+    "'pysqlbuilder.connections.odbc'"
 )
 
 class CursorODBC (Cursor):

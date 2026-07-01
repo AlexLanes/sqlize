@@ -3,12 +3,12 @@ from itertools import chain
 from typing import Any, Self, override
 from dataclasses import dataclass, field
 # internal
-from simple_sql_builder.parameters import IPositionalParameter
-from simple_sql_builder.shared import ManySequenceAny, SequenceAny, SQLValue
-from simple_sql_builder.expression import AliasedExpression, to_sql
-from simple_sql_builder.column import ColumnWithDefaultValue, ColumnEqualsValue, Column, AliasedColumn
-from simple_sql_builder.table import Table
-from simple_sql_builder.supports import SupportsReturning, ExecutableStatement, Data
+from pysqlbuilder.parameters import IPositionalParameter
+from pysqlbuilder.shared import ManySequenceAny, SequenceAny, SQLValue
+from pysqlbuilder.expression import AliasedExpression, to_sql
+from pysqlbuilder.column import ColumnWithDefaultValue, ColumnEqualsValue, Column, AliasedColumn
+from pysqlbuilder.table import Table
+from pysqlbuilder.supports import SupportsReturning, ExecutableStatement, Data
 
 @dataclass
 class InsertData[T] (Data):
@@ -188,7 +188,7 @@ class Insert (ExecutableStatement, SupportsReturning, SupportsConflicts):
 
     ## Examples
     ```python
-    from simple_sql_builder import E, A, T, Insert, Connection
+    from pysqlbuilder import E, A, T, Insert, Connection
 
     actor = T.actor
     insert = (
@@ -321,7 +321,7 @@ class InsertMany (ExecutableStatement, SupportsReturning, SupportsConflicts):
 
     ## Example
     ```python
-    from simple_sql_builder import T, InsertMany, Connection
+    from pysqlbuilder import T, InsertMany, Connection
 
     actor = T.actor
     insert = (

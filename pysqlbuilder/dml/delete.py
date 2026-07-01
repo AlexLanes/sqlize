@@ -1,16 +1,16 @@
 # std
 from typing import override
 # internal
-from simple_sql_builder.shared import SequenceAny
-from simple_sql_builder.table import Table
-from simple_sql_builder.supports import ExecutableStatement, SupportsReturning, SupportsWhere
+from pysqlbuilder.shared import SequenceAny
+from pysqlbuilder.table import Table
+from pysqlbuilder.supports import ExecutableStatement, SupportsReturning, SupportsWhere
 
 class Delete (ExecutableStatement, SupportsWhere, SupportsReturning):
     """Builder of `Delete` Statement
 
     ## Example
     ```python
-    from simple_sql_builder import T, Delete, Connection
+    from pysqlbuilder import T, Delete, Connection
 
     a = T.actor
     delete = (

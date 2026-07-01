@@ -4,15 +4,15 @@
 # std
 from typing import Any
 # internal
-from simple_sql_builder.shared import TableData, ColumnData
-from simple_sql_builder.connections import Connection as C
+from pysqlbuilder.shared import TableData, ColumnData
+from pysqlbuilder.connections import Connection as C
 # external
 try: from mssql_python import (
     connect as mssql_connect,
     Connection as mssql_Connection,
 )
 except ImportError:
-    raise ImportError("Optional dependency [mssql] needed to use 'simple_sql_builder.connections.mssql'")
+    raise ImportError("Optional dependency [mssql] needed to use 'pysqlbuilder.connections.mssql'")
 
 class MicrosoftSQL (C):
     """`Connection` for `Microsoft SQL Server` using external `mssql-python`

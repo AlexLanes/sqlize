@@ -1,18 +1,18 @@
 # std
 from typing import Self, override
 # internal
-from simple_sql_builder.shared import SequenceAny, SQLValue
-from simple_sql_builder.expression import to_sql
-from simple_sql_builder.column import ColumnWithDefaultValue, AliasedExpression, ColumnEqualsValue
-from simple_sql_builder.table import Table
-from simple_sql_builder.supports import ExecutableStatement, SupportsReturning, SupportsWhere
+from pysqlbuilder.shared import SequenceAny, SQLValue
+from pysqlbuilder.expression import to_sql
+from pysqlbuilder.column import ColumnWithDefaultValue, AliasedExpression, ColumnEqualsValue
+from pysqlbuilder.table import Table
+from pysqlbuilder.supports import ExecutableStatement, SupportsReturning, SupportsWhere
 
 class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     """Builder of `Update` Statement
 
     ## Example
     ```python
-    from simple_sql_builder import E, A, T, Update, Connection
+    from pysqlbuilder import E, A, T, Update, Connection
 
     # Simple Values
     a = T.actor
