@@ -7,7 +7,7 @@ from simple_sql_builder.expression import Expression
 from simple_sql_builder.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpression
 from simple_sql_builder.table import Table
 from simple_sql_builder.supports import SupportsReturning, SupportParameters, Data
-from simple_sql_builder import Update, InsertOne, Connection, ResultSQL
+from simple_sql_builder import Update, Insert, Connection, ResultSQL
 
 @dataclass
 class UpsertData (Data):
@@ -75,7 +75,7 @@ class Upsert (SupportsReturning, SupportParameters):
 
         # TRY INSERT
         try:
-            insert = InsertOne(self.data.table).Values(*self.data.not_matched)
+            insert = Insert(self.data.table).Values(*self.data.not_matched)
             insert.data.returning = self.data.returning
             insert.data.output = self.data.output
             result = conn.execute(insert)

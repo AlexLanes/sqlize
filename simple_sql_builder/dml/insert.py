@@ -1,11 +1,148 @@
 # std
-from typing import Self, override
+from itertools import chain
+from typing import Any, Self, override
+from dataclasses import dataclass, field
 # internal
+from simple_sql_builder.parameters import IPositionalParameter
 from simple_sql_builder.shared import ManySequenceAny, SequenceAny, SQLValue
 from simple_sql_builder.expression import AliasedExpression, to_sql
-from simple_sql_builder.column import ColumnWithDefaultValue, ColumnEqualsValue
+from simple_sql_builder.column import ColumnWithDefaultValue, ColumnEqualsValue, Column, AliasedColumn
 from simple_sql_builder.table import Table
-from simple_sql_builder.supports import SupportsReturning, ExecutableStatement
+from simple_sql_builder.supports import SupportsReturning, ExecutableStatement, Data
+
+@dataclass
+class InsertData[T] (Data):
+
+    values: list[list[T]] = field(default_factory=list)
+    ignore: bool = False
+    """`INSERT IGNORE`"""
+
+    do_nothing: list[str] | None = None
+    """`ON CONFLICT [(columns)] DO NOTHING`"""
+    do_update: tuple[list[str], list[ColumnEqualsValue | AliasedExpression | ColumnWithDefaultValue], bool] | None = None
+    """`([conflicts], [updates], is_postgresql)`"""
+
+    def conflict (self, positional: IPositionalParameter) -> tuple[list[str], list[Any]] | None:
+        """Returns `([sql_parts], [params])`
+        - `None` if not set"""
+        # DO NOTHING
+        if (do_nothing := self.do_nothing) is not None:
+            if not do_nothing: return (["ON CONFLICT DO NOTHING"], [])
+            else: return ([f"ON CONFLICT ({ ", ".join(do_nothing) }) DO NOTHING"], [])
+
+        # DO UPDATE
+        elif (do_update := self.do_update) is not None:
+            params = []
+            sets = list[str]()
+            for value in do_update[1]:
+                match value:
+                    case ColumnEqualsValue():
+                        name = value.left.quote_name(self.quote_info)
+                        sets.append(f"{name} = {positional.next()}")
+                        params.append(value.right)
+                    case AliasedExpression():
+                        name = value.quote_alias(self.quote_info)
+                        sql = to_sql(value.expression, table_alias=False, quote_info=self.quote_info)
+                        parameterized = sql.join().format(*(positional.next() for _ in sql))
+                        sets.append(f"{name} = {parameterized}")
+                        params.extend(sql)
+                    case ColumnWithDefaultValue():
+                        name = value.column.quote_name(self.quote_info)
+                        sets.append(f"{name} = {value.to_sql().join()}")
+
+            is_postgresql = do_update[2]
+            return [
+                f"ON CONFLICT ({ ", ".join(do_update[0]) }) DO UPDATE SET"
+                if is_postgresql
+                else "ON DUPLICATE KEY UPDATE",
+
+                ",\n".join(sets)
+            ], params
+
+class SupportsConflicts:
+
+    data: InsertData
+
+    def Ignore (self) -> Self:
+        """Ignore insert errors and skip conflicting rows
+        #### Supported By: `MySQL`"""
+        self.data.ignore = True
+        return self
+
+    def OnConflictDoNothing (self, *conflict: str | Column | AliasedColumn) -> Self:
+        """Skip rows that violate a unique or exclusion constraint
+        - `conflict` optional
+        #### Supported By: `PostgreSQL` `SQLite`"""
+        on = []
+        quote_info = self.data.quote_info
+
+        for column in conflict:
+            match column:
+                case Column(): on.append(column.quote_name(quote_info))
+                case AliasedColumn(): on.append(column.quote_alias(quote_info))
+                case _: on.append(str(column))
+
+        self.data.do_nothing = on
+        return self
+
+    def OnConflictDoUpdate (self, conflicts: list[str | Column | AliasedColumn],
+                                  *to_update: ColumnEqualsValue | AliasedExpression | ColumnWithDefaultValue,
+                                  **to_updates: SQLValue) -> Self:
+        """Update existing rows that violate a unique or exclusion constraint
+        #### `SQLite`
+        `.OnConflictDoUpdate(["id"], T.users.name == "Foo", last_name="Bar")`  
+        `.OnConflictDoUpdate(["id"], E.CURRENT_TIMESTAMP.As("last_update"))`  
+        `.OnConflictDoUpdate([T.users.email], (T.users.age * 2).As("age"))`  
+        `.OnConflictDoUpdate([T.users.email], (T.excluded.age * 2).As("age"))`
+        #### `PostgreSQL`
+        `.OnConflictDoUpdate(["id"], T.users.name == "Foo", last_name="Bar")`  
+        `.OnConflictDoUpdate(["id"], T.users.last_update.DEFAULT_VALUE))`  
+        `.OnConflictDoUpdate([T.users.email], (T.users.age * 2).As("age"))`  
+        `.OnConflictDoUpdate([T.users.email], (T.EXCLUDED.age * 2).As("age"))`"""
+        assert self.data.table is not None
+        if not conflicts:
+            raise ValueError(f"At least one value is required to 'conflicts' on {self.__class__.__name__}().OnConflictDoUpdate()")
+        if not to_update and not to_updates:
+            raise ValueError(f"At least one value is required to 'update' on {self.__class__.__name__}().OnConflictDoUpdate()")
+
+        conflict = list[str]()
+        quote_info = self.data.quote_info
+
+        for column in conflicts:
+            match column:
+                case Column(): conflict.append(column.quote_name(quote_info))
+                case AliasedColumn(): conflict.append(column.quote_alias(quote_info))
+                case _: conflict.append(str(column))
+
+        sets = [*to_update]
+        sets.extend(
+            ColumnEqualsValue(self.data.table.Column(column), "=", value)
+            for column, value in to_updates.items()
+        )
+
+        self.data.do_update = (conflict, sets, True)
+        return self
+
+    def OnDuplicateKeyUpdate (self, *to_update: ColumnEqualsValue | AliasedExpression | ColumnWithDefaultValue,
+                                    **to_updates: SQLValue) -> Self:
+        """Update existing rows when a duplicate key conflict occurs
+        #### Supported By: `MySQL`
+        `.OnDuplicateKeyUpdate(T.users.name == "Foo", last_name="Bar")`  
+        `.OnDuplicateKeyUpdate((T.users.age * 2).As("age"))`  
+        `.OnDuplicateKeyUpdate((T.new.age * 2).As("age"))`  
+        `.OnDuplicateKeyUpdate(T.users.last_update.DEFAULT_VALUE)`"""
+        assert self.data.table is not None
+        if not to_update and not to_updates:
+            raise ValueError(f"At least one value is required to 'update' on {self.__class__.__name__}().OnConflictDoUpdate()")
+
+        sets = [*to_update]
+        sets.extend(
+            ColumnEqualsValue(self.data.table.Column(column), "=", value)
+            for column, value in to_updates.items()
+        )
+
+        self.data.do_update = ([], sets, False)
+        return self
 
 class InsertDefaultValues (ExecutableStatement, SupportsReturning):
 
@@ -39,16 +176,16 @@ class InsertDefaultValues (ExecutableStatement, SupportsReturning):
 
         return "\n".join(sqls), params
 
-class InsertOne (ExecutableStatement, SupportsReturning):
+class Insert (ExecutableStatement, SupportsReturning, SupportsConflicts):
     """Builder of `Insert` Statement
 
     ## Examples
     ```python
-    from simple_sql_builder import E, A, T, InsertOne, Connection
+    from simple_sql_builder import E, A, T, Insert, Connection
 
     actor = T.actor
     insert = (
-        InsertOne(into=actor)
+        Insert(into=actor)
         .Values(
             actor.actor_id.DEFAULT_VALUE,
             actor.first_name == "Alex",
@@ -58,7 +195,7 @@ class InsertOne (ExecutableStatement, SupportsReturning):
         .Returning(actor.All()) # PostgreSQL, SQLite
     )
     insert = (
-        InsertOne(into="actor")
+        Insert(into="actor")
         .Values(
             first_name = "Alex",
             last_name = "Lanes",
@@ -67,7 +204,7 @@ class InsertOne (ExecutableStatement, SupportsReturning):
         .Output(T.inserted.All()) # SQL Server
     )
     insert = (
-        InsertOne(into=actor)
+        Insert(into=actor)
         .DefaultValues()
         .Returning(A.All())
     )
@@ -79,11 +216,11 @@ class InsertOne (ExecutableStatement, SupportsReturning):
     ```
     """
 
-    data_values: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
+    data: InsertData[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
 
     def __init__ (self, into: Table | str) -> None:
         super().__init__()
-        self.data_values = []
+        self.data = InsertData() # type: ignore
         self.data.table = into if isinstance(into, Table) else Table(into, None)
 
     def __repr__ (self) -> str:
@@ -93,13 +230,13 @@ class InsertOne (ExecutableStatement, SupportsReturning):
     @override
     def to_sql (self) -> tuple[str, SequenceAny]:
         assert self.data.table is not None
-        if not self.data_values:
-            raise ValueError("InsertOne().Values() should be called first")
+        if not self.data.values:
+            raise ValueError("Insert().Values() should be called first")
 
         params = []
         columns, values = [], []
         positional = self.data.parameter()
-        for value in self.data_values:
+        for value in self.data.values[0]:
             match value:
 
                 case ColumnEqualsValue():
@@ -118,20 +255,30 @@ class InsertOne (ExecutableStatement, SupportsReturning):
                     values.append(sql.join().format(*parameters))
                     params.extend(sql)
 
-                case _: raise TypeError(f"Invalid value found on InsertOne().Values({value!r})")
+                case _: raise TypeError(f"Invalid value found on Insert().Values({value!r})")
 
+        # INSERT INTO
+        insert = "INSERT IGNORE" if self.data.ignore else "INSERT"
         parts = [
-            f"INSERT INTO {self.data.table.to_table_name()}",
+            f"{insert} INTO {self.data.table.to_table_name()}",
             f"({ ", ".join(columns) })",
         ]
 
+        # OUTPUT
         if data := self.data.data_output(False):
             parameters = (positional.next() for _ in data)
             parts.append(data.join().format(*parameters))
             params.extend(data)
 
+        # VALUES
         parts.append(f"VALUES ({ ", ".join(values) })")
 
+        # ON CONFLICT
+        if (data := self.data.conflict(positional)) is not None:
+            parts.extend(data[0])
+            params.extend(data[1])
+
+        # RETURNING
         if data := self.data.data_returning(False):
             parameters = (positional.next() for _ in data)
             parts.append(data.join().format(*parameters))
@@ -139,16 +286,18 @@ class InsertOne (ExecutableStatement, SupportsReturning):
 
         return "\n".join(parts), params
 
-    def Values (self, *values: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression, **columns: SQLValue) -> Self:
-        """Apply `VALUES ({ values })`  
+    def Values (self, *column: ColumnEqualsValue | AliasedExpression | ColumnWithDefaultValue, **columns: SQLValue) -> Self:
+        """Apply `VALUES ({ columns })`  
         `.Values(name="Foo", age=11, last_update=datetime.now())`  
         `.Values(T.users.id.DEFAULT_VALUE, T.users.name == "Foo", E.CURRENT_TIMESTAMP.As("last_update"))`"""
         assert self.data.table is not None
-        if not values and not columns:
-            raise ValueError("At least one value is required on InsertOne().Values()")
+        if not column and not columns:
+            raise ValueError("At least one value is required on Insert().Values()")
+        if self.data.values:
+            raise ValueError("Insert().Values() should be called once")
 
-        self.data_values.extend(values)
-        self.data_values.extend(
+        self.data.values.append(list(column))
+        self.data.values[0].extend(
             ColumnEqualsValue(self.data.table.Column(column), "=", value)
             for column, value in columns.items()
         )
@@ -160,7 +309,7 @@ class InsertOne (ExecutableStatement, SupportsReturning):
         assert self.data.table is not None
         return InsertDefaultValues(self.data.table)
 
-class InsertMany (ExecutableStatement, SupportsReturning):
+class InsertMany (ExecutableStatement, SupportsReturning, SupportsConflicts):
     """Builder of `Insert` Statement with multiple values
 
     ## Example
@@ -183,39 +332,51 @@ class InsertMany (ExecutableStatement, SupportsReturning):
     ```
     """
 
-    data_values: list[list[ColumnEqualsValue]]
+    data: InsertData[ColumnEqualsValue]
 
     def __init__ (self, into: Table | str) -> None:
         super().__init__()
-        self.data_values = []
+        self.data = InsertData() # type: ignore
         self.data.table = into if isinstance(into, Table) else Table(into, None)
 
     def __repr__ (self) -> str:
         assert self.data.table is not None
-        return f"<INSERT INTO {self.data.table.to_table_name()!r} {len(self.data_values)} ROW(S)>"
+        return f"<INSERT INTO {self.data.table.to_table_name()!r} {len(self.data.values)} ROW(S)>"
 
     @override
     def to_sql (self) -> tuple[str, ManySequenceAny]:
         assert self.data.table is not None
-        if not self.data_values:
+        if not self.data.values:
             raise ValueError("InsertMany().Values() should be called first")
 
         table_alias = False
-        first = self.data_values[0]
+        first = self.data.values[0]
         positional = self.data.parameter()
+
+        # INSERT INTO COLUMNS
+        insert = "INSERT IGNORE" if self.data.ignore else "INSERT"
         parts = [
-            f"INSERT INTO {self.data.table.to_table_name()}",
+            f"{insert} INTO {self.data.table.to_table_name()}",
             f"({ ", ".join(c.left.quote_name(self.data.quote_info) for c in first) })",
         ]
 
+        # OUTPUT
         output = []
         if data := self.data.data_output(table_alias):
             parameters = (positional.next() for _ in data)
             parts.append(data.join().format(*parameters))
             output.extend(data)
 
+        # VALUES
         parts.append(f"VALUES ({ ", ".join(positional.next() for _ in first) })")
 
+        # ON CONFLICT
+        conflicts = []
+        if (data := self.data.conflict(positional)) is not None:
+            parts.extend(data[0])
+            conflicts = data[1]
+
+        # RETURNING
         returning = []
         if data := self.data.data_returning(table_alias):
             parameters = (positional.next() for _ in data)
@@ -225,12 +386,13 @@ class InsertMany (ExecutableStatement, SupportsReturning):
         return (
             "\n".join(parts),
             [
-                tuple(
-                    value
-                    for column in columns
-                    for value in [*output, column.right, *returning]
-                )
-                for columns in self.data_values
+                tuple(chain(
+                    output,
+                    (column.right for column in columns),
+                    conflicts,
+                    returning
+                ))
+                for columns in self.data.values
             ]
         )
 
@@ -254,7 +416,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
         )
         names = [c.left.name for c in ordered]
 
-        match self.data_values:
+        match self.data.values:
             case [] if len(names) != len(set(names)):
                 raise ValueError(f"Duplicate names found on InsertMany().Values(): {names}")
 
@@ -267,7 +429,7 @@ class InsertMany (ExecutableStatement, SupportsReturning):
                         f" Expected {expected}"
                     )
 
-        self.data_values.append(ordered)
+        self.data.values.append(ordered)
         return self
 
-__all__ = ["InsertOne", "InsertMany"]
+__all__ = ["Insert", "InsertMany"]

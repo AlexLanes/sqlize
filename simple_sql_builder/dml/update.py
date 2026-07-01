@@ -108,15 +108,15 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
         return "\n".join(parts), params
 
-    def Set (self, *value: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression, **columns: SQLValue) -> Self:
+    def Set (self, *column: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression, **columns: SQLValue) -> Self:
         """Apply `SET {column} = {value}, ...`  
         `.Set(T.users.name == "Foo", T.users.id.DEFAULT_VALUE)`  
         `.Set(name="Foo", id=1)`"""
         assert self.data.table
-        if not value and not columns:
+        if not column and not columns:
             raise ValueError("At least one value is required on Update().Set()")
 
-        self.data_set.extend(value)
+        self.data_set.extend(column)
         self.data_set.extend(
             ColumnEqualsValue(self.data.table.Column(column), "=", value)
             for column, value in columns.items()

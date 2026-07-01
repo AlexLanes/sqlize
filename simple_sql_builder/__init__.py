@@ -6,7 +6,7 @@ from simple_sql_builder.table      import T # Table + Column Builder
 from simple_sql_builder.connections import Connection, ResultSQL
 
 # DMLs
-from simple_sql_builder.dml.insert import InsertMany, InsertOne
+from simple_sql_builder.dml.insert import Insert, InsertMany
 from simple_sql_builder.dml.select import Select
 from simple_sql_builder.dml.delete import Delete
 from simple_sql_builder.dml.update import Update
