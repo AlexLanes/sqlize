@@ -4,15 +4,15 @@
 # std
 from typing import Any, override
 # internal
-from pysqlbuilder.shared import SequenceAny, TableData, ColumnData
-from pysqlbuilder.connections.setup import Connection as C, Cursor
+from sqlize.shared import SequenceAny, TableData, ColumnData
+from sqlize.connections.setup import Connection as C, Cursor
 # external
 try:
     from mysql.connector import connect
     from mysql.connector.cursor import MySQLCursor as cursor
     from mysql.connector.connection import MySQLConnection as connection
 except ImportError:
-    raise ImportError("Optional dependency [mysql] needed to use 'pysqlbuilder.connections.mysql'")
+    raise ImportError("Optional dependency [mysql] needed to use 'sqlize.connections.mysql'")
 
 class MyCursor (Cursor):
 

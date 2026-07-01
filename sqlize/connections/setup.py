@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime, date, time
 from typing import Protocol, Any, Self, Iterator, Callable
 # internal
-from pysqlbuilder.parameters import *
-from pysqlbuilder.shared import SequenceAny, ManySequenceAny, MappingAny, SQLValue
-from pysqlbuilder.supports import ExecutableStatement, SupportParameters
+from sqlize.parameters import *
+from sqlize.shared import SequenceAny, ManySequenceAny, MappingAny, SQLValue
+from sqlize.supports import ExecutableStatement, SupportParameters
 
 class ICursorPEP249 (Protocol):
     def __iter__ (self) -> Self: ...

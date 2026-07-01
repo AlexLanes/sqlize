@@ -471,7 +471,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pysqlbuilder"
+name = "sqlize"
 version = "1"
 source = { editable = "." }
 

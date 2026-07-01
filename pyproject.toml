@@ -1,5 +1,5 @@
 [project]
-name = "pysqlbuilder"
+name = "sqlize"
 version = "1.0"
 description = "Create SQL syntax with a natural python builder. Supports automatic execution on multiple connections"
 readme = "README.md"

@@ -6,11 +6,11 @@ from typing import (
     Iterable, override
 )
 # internal
-from pysqlbuilder.shared     import SequenceAny, DataSQL, indent
-from pysqlbuilder.expression import Expression, AliasedExpression
-from pysqlbuilder.column     import Column, AliasedColumn
-from pysqlbuilder.table      import Table
-from pysqlbuilder.supports   import *
+from sqlize.shared     import SequenceAny, DataSQL, indent
+from sqlize.expression import Expression, AliasedExpression
+from sqlize.column     import Column, AliasedColumn
+from sqlize.table      import Table
+from sqlize.supports   import *
 
 @dataclass
 class SelectData (Data):
@@ -189,7 +189,7 @@ class Select (Queryable, SupportsWhere):
 
     ## Example
     ```python
-    from pysqlbuilder import E, A, T, Select, Connection
+    from sqlize import E, A, T, Select, Connection
 
     # Select
     users = T.users

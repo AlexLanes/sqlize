@@ -2,12 +2,12 @@
 from typing import Self
 from dataclasses import dataclass, field
 # internal
-from pysqlbuilder.shared import SQLValue
-from pysqlbuilder.expression import Expression
-from pysqlbuilder.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpression
-from pysqlbuilder.table import Table
-from pysqlbuilder.supports import SupportsReturning, SupportParameters, Data
-from pysqlbuilder import Update, Insert, Connection, ResultSQL
+from sqlize.shared import SQLValue
+from sqlize.expression import Expression
+from sqlize.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpression
+from sqlize.table import Table
+from sqlize.supports import SupportsReturning, SupportParameters, Data
+from sqlize import Update, Insert, Connection, ResultSQL
 
 @dataclass
 class UpsertData (Data):
@@ -20,7 +20,7 @@ class Upsert (SupportsReturning, SupportParameters):
 
     ## Example
     ```python
-    from pysqlbuilder import A, T, Upsert, Connection
+    from sqlize import A, T, Upsert, Connection
 
     actor = T.actor
     updated, result = (

@@ -4,7 +4,7 @@ import itertools, string
 from typing import Generator
 from dataclasses import dataclass
 # internal
-from pysqlbuilder.column import Column, ESPECIAL_TABLES
+from sqlize.column import Column, ESPECIAL_TABLES
 
 def gen () -> Generator[str, None, None]:
     c_cycle = itertools.cycle(string.ascii_lowercase)

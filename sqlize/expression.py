@@ -6,7 +6,7 @@ from typing import (
     Iterable, Literal, NoReturn
 )
 # internal
-from pysqlbuilder.shared import DataSQL, quote, indent, SQLValue
+from sqlize.shared import DataSQL, quote, indent, SQLValue
 
 type ExpOrValue  = Expression | Any
 type ExpOrString = Expression | str

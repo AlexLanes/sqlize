@@ -4,15 +4,15 @@
 # std
 from typing import Any
 # internal
-from pysqlbuilder.shared import TableData, ColumnData
-from pysqlbuilder.connections import Connection as C
+from sqlize.shared import TableData, ColumnData
+from sqlize.connections import Connection as C
 # external
 try: from mssql_python import (
     connect as mssql_connect,
     Connection as mssql_Connection,
 )
 except ImportError:
-    raise ImportError("Optional dependency [mssql] needed to use 'pysqlbuilder.connections.mssql'")
+    raise ImportError("Optional dependency [mssql] needed to use 'sqlize.connections.mssql'")
 
 class MicrosoftSQL (C):
     """`Connection` for `Microsoft SQL Server` using external `mssql-python`
