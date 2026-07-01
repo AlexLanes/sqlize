@@ -128,9 +128,16 @@ class SupportsConflicts:
         """Update existing rows when a duplicate key conflict occurs
         #### Supported By: `MySQL`
         `.OnDuplicateKeyUpdate(T.users.name == "Foo", last_name="Bar")`  
+        `.OnDuplicateKeyUpdate(T.users.last_update.DEFAULT_VALUE)`  
+        #### Current Value
+        `.OnDuplicateKeyUpdate((A.age * 2).As("age"))`  
         `.OnDuplicateKeyUpdate((T.users.age * 2).As("age"))`  
-        `.OnDuplicateKeyUpdate((T.new.age * 2).As("age"))`  
-        `.OnDuplicateKeyUpdate(T.users.last_update.DEFAULT_VALUE)`"""
+        Translates to `age = (age * %s)`
+        #### Insert Value
+        `.OnDuplicateKeyUpdate(E.VALUES(A.name).As("name"))`  
+        `.OnDuplicateKeyUpdate(E.VALUES(T.users.name).As("name"))`  
+        Translates to `name = VALUES(name)`
+        """
         assert self.data.table is not None
         if not to_update and not to_updates:
             raise ValueError(f"At least one value is required to 'update' on {self.__class__.__name__}().OnConflictDoUpdate()")

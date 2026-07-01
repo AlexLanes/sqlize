@@ -4,8 +4,8 @@
 # std
 from typing import Any, override
 # internal
-from simple_sql_builder.shared import ManySequenceAny, SequenceAny, TableData, ColumnData
-from simple_sql_builder.connections.setup import Connection as C, Cursor, ResultSQL
+from simple_sql_builder.shared import SequenceAny, TableData, ColumnData
+from simple_sql_builder.connections.setup import Connection as C, Cursor
 # external
 try:
     from pymysql import connect as pymysql_connect, Connection as pymysql_Connection
@@ -21,28 +21,6 @@ class MyCursor (Cursor):
     def inserted_id (self) -> int | None:
         """First `AUTO_INCREMENT` value after an `INSERT`"""
         return self.cursor.lastrowid or None
-
-    @override
-    def execute (self, sql: str, params: SequenceAny | None = None, **kwargs) -> ResultSQL:
-        self.cursor.execute(sql, params)
-
-        columns = self.columns
-        rows = list[SequenceAny](row for row in self.cursor) if columns else []
-        rowcount = self.rowcount
-
-        self.close()
-        return ResultSQL(rowcount, len(rows), columns, rows)
-
-    @override
-    def executemany (self, sql: str, params: ManySequenceAny, **kwargs) -> ResultSQL:
-        self.cursor.executemany(sql, params)
-
-        columns = self.columns
-        rows = list[SequenceAny](row for row in self.cursor) if columns else []
-        rowcount = self.rowcount
-
-        self.close()
-        return ResultSQL(rowcount, len(rows), columns, rows)
 
 class MySQL (C):
     """`Connection` for `MySQL` database using external `PyMySQL`
