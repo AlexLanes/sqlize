@@ -5,7 +5,7 @@ from typing import Any, Literal, override, overload
 from simple_sql_builder.shared import quote, DataSQL
 from simple_sql_builder.expression import (
     Expression, BinaryExpression, LiteralExpression,
-    OrderableExpression, AliasedExpression
+    OrderableExpression, AliasedExpression, E
 )
 
 ESPECIAL_TABLES = { "old", "new", "inserted", "deleted", "excluded" }
@@ -34,13 +34,14 @@ class OrderableColumn (OrderableExpression):
 
 class AliasedColumn (AliasedExpression):
 
-    alias: str
     column: Column | None
 
     def __init__ (self, column: Column | None, alias: str) -> None:
-        self.alias = alias
         self.column = column
-        self.params = tuple()
+        super().__init__(
+            column if column is not None else E.Value(alias),
+            alias
+        )
 
     @override
     def to_sql (self, *, table_alias=True, quote_info=None):
