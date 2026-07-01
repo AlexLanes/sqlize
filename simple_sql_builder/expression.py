@@ -196,22 +196,22 @@ class Expression (AbstractExpression):
     #-----------------------#
 
     def __eq__ (self, other: ExpOrValue) -> Expression: # type: ignore
-        """Apply `self = {other}` or `self IS {other}` on `None` `E.Literal()` `E.LITERAL`"""
+        """Apply `self = {other}` or `self IS {other}` on `None` `E.NULL` `E.TRUE` `E.FALSE` `E.UNKNOWN`"""
         match other:
             case None:
                 return BinaryExpression(self, "IS", None)
             case LiteralExpression():
-                return BinaryExpression(self, "IS", other)
+                return BinaryExpression(self, "IS" if other.especial_is else "=", other)
             case _:
                 return BinaryExpression(self, "=", other)
 
     def __ne__ (self, other: ExpOrValue) -> Expression: # type: ignore
-        """Apply `self != {other}` or `self IS NOT {other}` on `None` `E.Literal()` `E.LITERAL`"""
+        """Apply `self != {other}` or `self IS NOT {other}` on `None` `E.NULL` `E.TRUE` `E.FALSE` `E.UNKNOWN`"""
         match other:
             case None:
                 return BinaryExpression(self, "IS NOT", None)
             case LiteralExpression():
-                return BinaryExpression(self, "IS NOT", other)
+                return BinaryExpression(self, "IS NOT" if other.especial_is else "!=", other)
             case _:
                 return BinaryExpression(self, "!=", other)
 
@@ -441,6 +441,11 @@ class ValueExpression (Expression):
         return DataSQL("{}", self.params)
 
 class LiteralExpression (Expression):
+
+    @property
+    def especial_is (self) -> bool:
+        return str(self.params[-1]) in { "NULL", "TRUE", "FALSE", "UNKNOWN" }
+
     @override
     def to_sql (self, *, table_alias=True, quote_info=None):
         return DataSQL(str(self.params[-1]), [])

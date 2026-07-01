@@ -8,7 +8,7 @@ from simple_sql_builder.expression import (
     OrderableExpression, AliasedExpression
 )
 
-ESPECIAL_TABLES = { "old", "new", "inserted", "deleted" }
+ESPECIAL_TABLES = { "old", "new", "inserted", "deleted", "excluded" }
 
 class OrderableColumn (OrderableExpression):
 
@@ -121,9 +121,12 @@ class Column (Expression):
     @override
     def __eq__ (self, other: Expression | Any) -> BinaryExpression | ColumnEqualsValue:
         match other:
-            case None: operator = "IS"
-            case LiteralExpression(): operator = "IS"
-            case _: operator = "="
+            case None:
+                operator = "IS"
+            case LiteralExpression() if other.especial_is:
+                operator = "IS"
+            case _:
+                operator = "="
         cls = BinaryExpression if isinstance(other, Expression) else ColumnEqualsValue
         return cls(self, operator, other)
 
