@@ -125,6 +125,10 @@ class ResultSQL:
             ensure_ascii = False,
         )
 
+    def print (self) -> None:
+        """Print to `console`"""
+        print(*self, self, sep="\n")
+
 class Cursor:
     def __init__ (self, cursor: ICursorPEP249) -> None:
         self.cursor = cursor
@@ -225,6 +229,26 @@ class Connection (SupportParameters):
         if params and isinstance(params[0], (list, tuple)):
             return cursor.executemany(sql, params, **kwargs)
         return cursor.execute(sql, params, **kwargs)
+
+    def execute_and_print (self, statement: ExecutableStatement, **kwargs) -> None:
+        """Execute `SQL: Statement` and `print` to console
+        - Type of `PositionalParameter` guessed on `init` by `conn` name
+            - `set_parameter()` to manually set
+        - `kwargs` additional params `execute()` or `executemany()` accepts"""
+        sql, params = (
+            statement
+            .set_parameter(self.data.parameter, self.data.quote_info)
+            .to_sql()
+        )
+
+        print("", "--- SQL ---", sql, "", "--- PARAMS ---", sep="\n")
+        if params and isinstance(params[0], (tuple, list)):
+            print(*params, sep="\n")
+        else: print(params)
+    
+        print("\n--- Result ---")
+        self.execute(statement, **kwargs).print()
+        print()
 
 __all__ = [
     "ResultSQL",
