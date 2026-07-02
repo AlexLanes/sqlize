@@ -108,7 +108,7 @@ class SupportsWhere (SupportsData):
     def Where (self, expression: Expression) -> Self:
         """Apply `WHERE {expression}`
         #### A `Column` can build `Expression`
-        #### See `E` docstring for more info
+        #### See `sqlize.E` docstring for more info
 
         # Examples
         `users = T.users`  
