@@ -1,6 +1,6 @@
 # std
-from typing import overload
 from dataclasses import dataclass
+from typing import overload, override
 # internal
 from sqlize.shared import SQLValue
 from sqlize.table import Table
@@ -40,7 +40,12 @@ class Column[T: SQLValue]:
             raise error from None
 
 class PrimaryKey[T: SQLValue] (Column[T]):
-    ...
+
+    @override
+    def __set__ (self, instance, value: T) -> None:
+        if self.name in instance.__dict__:
+            raise AttributeError(f"{instance.__class__.__name__}().{self.name} is a PrimaryKey and should not be mutable")
+        super().__set__(instance, value)
 
 @dataclass(slots=True, frozen=True)
 class ColumnInfo:

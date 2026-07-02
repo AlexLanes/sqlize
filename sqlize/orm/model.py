@@ -3,16 +3,18 @@ from typing import (
     Self, get_args,
     get_type_hints, get_origin
 )
+from typing import dataclass_transform
 # internal
 from sqlize.shared import SQLValue, MappingAny, stringify
 from sqlize.table import Table
 from sqlize.column import E, A
 from sqlize.connections import Connection
-from sqlize.dml import Select, Delete
+from sqlize.dml import Select, Delete, Update
 from sqlize.orm.exceptions import *
 from sqlize.orm.column import *
 from sqlize.orm.select import ModelSelect
 
+@dataclass_transform(eq_default=False, kw_only_default=True)
 class SQLizer:
     """`Base Model` used as inheritance
     - `__table__` to set the name of table `Default: str(Model.__name__)`
@@ -32,7 +34,7 @@ class SQLizer:
 
     # Open a Connection
     # Add to be used by other methods
-    with SQLite().AddInstance() as sqlite:
+    with SQLite().AddInstance() as connection:
 
         # Select PK
         user_1 = Users.Get(id=1)
@@ -41,18 +43,34 @@ class SQLizer:
         for user in Users.Select().OrderBy(Users.id.ASC).Limit(10).All():
             print(user.id, user.name)
 
+        # Update
+        user_1.name = "Foo"
+        user_1.Update(name="Foo", ...)
+        # Refresh Columns
+        user_1.Refresh()
+
         # Delete PK
         deleted = Users.Delete(raise_if_not_found=False, id=1)
         # Delete Object
         user_1.Remove()
+
+        # Save
+        connection.commit()
     ```
     """
 
     __table__: Table | str
     __data__: ModelData
 
-    def __init__ (self, data: MappingAny) -> None:
-        for name, value in data.items():
+    def __init__ (self, **kwargs: SQLValue) -> None:
+        infos = self.__data__.infos
+        for name, value in kwargs.items():
+            if name not in infos:
+                raise AttributeError(
+                    f"Unexpected atribute for {self.__class__.__name__}({name}={value!r})",
+                    name = name,
+                    obj = self
+                )
             setattr(self, name, value)
 
     def __repr__ (self) -> str:
@@ -152,10 +170,7 @@ class SQLizer:
             .Where(where)
         )
         match result.returned:
-            case 1:
-                obj = object.__new__(cls)
-                obj.__dict__.update(result.first)
-                return obj
+            case 1: return cls(**result.first)
             case 0:
                 raise NotFoundError(
                     f"No Result for {cls.__name__}.Get({ pk })",
@@ -250,5 +265,70 @@ class SQLizer:
                 f"Multiple Results({ rowcount }) for {cls.__name__}.Delete({ pk }). "
                 f"PrimaryKey(s) should match 1 row only"
             )
+
+    # ------ #
+    # Update #
+    # ------ #
+
+    def Update (self, **update: SQLValue) -> Self:
+        """Update columns of `Model` by `PrimaryKey` values
+        - `update` used to update `self` before executing `Update`
+        - `NotFoundError` `PrimaryKeyNotSetError` `MultipleResultsError`"""
+        pks, columns = self.__data__.columns
+        if not pks:
+            raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self}", obj=self)
+
+        connection = self.GetConnection()
+
+        infos = self.__data__.infos
+        for name, value in update.items():
+            if name not in infos:
+                raise AttributeError(
+                    f"Unexpected atribute for {self.__class__.__name__}().Update({name}={value!r})",
+                    name = name,
+                    obj = self
+                )
+            setattr(self, name, value)
+
+        where = E
+        for pk in pks:
+            exp = pk == getattr(self, pk.name)
+            where = exp if where is E else where.And(exp)
+
+        result = connection.execute(
+            Update(self.__data__.table)
+            .Set(**{
+                column.name: getattr(self, column.name)
+                for column in columns
+            })
+            .Where(where)
+        )
+
+        match result.rowcount:
+            case 1: return self
+            case 0: raise NotFoundError(
+                f"No Result for {self.__class__.__name__}().Update()",
+                cls = type(self),
+                values = self.to_dict()
+            )
+            case _: raise MultipleResultsError(
+                f"Multiple Results({ result.rowcount }) for {self.__class__.__name__}().Update(). "
+                f"PrimaryKey(s) should match 1 row only"
+            )
+
+    def Refresh (self) -> Self:
+        """Refresh Columns of `Model` object by `PrimaryKey` values
+        - `NotFoundError` `PrimaryKeyNotSetError`"""
+        pks, columns = self.__data__.columns
+        if not pks:
+            raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self}", obj=self)
+
+        updated = self.Get(**{ pk.name: getattr(self, pk.name) for pk in pks })
+        for column in columns:
+            name = column.name
+            value = getattr(updated, name)
+            setattr(self, name, value)
+
+        return self
 
 __all__ = ["SQLizer"]

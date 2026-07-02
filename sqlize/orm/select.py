@@ -18,7 +18,7 @@ class ModelSelect[T: IModel] (Select):
         model = self.model
         connection = self.model.GetConnection()
         return [
-            model(line)
+            model(**line)
             for line in connection.execute(self)
         ]
 
@@ -27,7 +27,7 @@ class ModelSelect[T: IModel] (Select):
         - `NotFoundException`"""
         connection = self.model.GetConnection()
         if result := connection.execute(self):
-            return self.model(result.first)
+            return self.model(**result.first)
         raise NotFoundError(
             f"No Result for {self.model.__name__}.Select().First()",
             cls = self.model,
