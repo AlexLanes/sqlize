@@ -6,8 +6,7 @@ from sqlize.table      import T # Table + Column Builder
 from sqlize.connections import Connection, ResultSQL
 
 # DMLs
-from sqlize.dml.insert import Insert, InsertMany
-from sqlize.dml.select import Select
-from sqlize.dml.delete import Delete
-from sqlize.dml.update import Update
-from sqlize.dml.upsert import Upsert
+from sqlize.dml import *
+
+# ORM
+from sqlize import orm

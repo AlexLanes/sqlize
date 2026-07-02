@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Any, Literal, override, overload
 # internal
-from sqlize.shared import quote, DataSQL
+from sqlize.shared import SQLValue, quote, DataSQL
 from sqlize.expression import (
     Expression, BinaryExpression, LiteralExpression,
     OrderableExpression, AliasedExpression, E
@@ -84,7 +84,7 @@ class ColumnWithDefaultValue (LiteralExpression):
         super().__init__(name)
         self.column = column
 
-class Column (Expression):
+class Column[T: SQLValue] (Expression):
 
     ta: str
     name: str

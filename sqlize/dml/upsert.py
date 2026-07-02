@@ -7,7 +7,8 @@ from sqlize.expression import Expression
 from sqlize.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpression
 from sqlize.table import Table
 from sqlize.supports import SupportsReturning, SupportParameters, Data
-from sqlize import Update, Insert, Connection, ResultSQL
+from sqlize.dml import Update, Insert
+from sqlize.connections import Connection, ResultSQL
 
 @dataclass
 class UpsertData (Data):
