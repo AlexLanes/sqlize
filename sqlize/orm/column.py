@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from sqlize.shared import SQLValue
 from sqlize.table import Table
 from sqlize.column import Column as C
+from sqlize.orm.exceptions import PrimaryKeyNotSetError
 
 class Column[T: SQLValue]:
 
@@ -20,18 +21,22 @@ class Column[T: SQLValue]:
         instance.__dict__[self.name] = value
 
     @overload
-    def __get__(self, instance: None, owner: type) -> C: ...
+    def __get__ (self, instance: None, owner: type) -> C: ...
     @overload
-    def __get__(self, instance: object, owner: type) -> T: ...
-    def __get__(self, instance: object, owner: type) -> C | T:
+    def __get__ (self, instance: object, owner: type) -> T: ...
+    def __get__ (self, instance: object, owner: type) -> C | T:
         # Class.attribute -> Column[T]
         if instance is None:
             return self.column
         # Instance.attribute -> type[T]
         try: return instance.__dict__[self.name]
         except KeyError:
-            error = AttributeError(self.name)
-            error.add_note(f"Atribute {instance.__class__.__name__}.{self.name} has not been set")
+            msg = f"Atribute {instance.__class__.__name__}.{self.name} of instance has not been set"
+            error = (
+                PrimaryKeyNotSetError(msg, name=self.name, obj=instance)
+                if self.__class__ is PrimaryKey
+                else AttributeError(msg, name=self.name, obj=instance)
+            )
             raise error from None
 
 class PrimaryKey[T: SQLValue] (Column[T]):

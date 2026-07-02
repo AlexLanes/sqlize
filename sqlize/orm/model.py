@@ -1,11 +1,14 @@
 # std
-from typing import Self, get_args, get_type_hints, get_origin
+from typing import (
+    Self, get_args,
+    get_type_hints, get_origin
+)
 # internal
 from sqlize.shared import SQLValue, MappingAny, stringify
 from sqlize.table import Table
 from sqlize.column import E, A
-from sqlize.dml import Select
 from sqlize.connections import Connection
+from sqlize.dml import Select, Delete
 from sqlize.orm.exceptions import *
 from sqlize.orm.column import *
 from sqlize.orm.select import ModelSelect
@@ -32,11 +35,16 @@ class SQLizer:
     with SQLite().AddInstance() as sqlite:
 
         # Select PK
-        print(Users.Get(id=1))
-
+        user_1 = Users.Get(id=1)
+        print(user_1)
         # Select Custom
         for user in Users.Select().OrderBy(Users.id.ASC).Limit(10).All():
             print(user.id, user.name)
+
+        # Delete PK
+        deleted = Users.Delete(raise_if_not_found=False, id=1)
+        # Delete Object
+        user_1.Remove()
     ```
     """
 
@@ -49,7 +57,7 @@ class SQLizer:
 
     def __repr__ (self) -> str:
         name = self.__class__.__name__
-        return f"<{name} {self.__dict__}>"
+        return f"<{name} {self.to_dict()}>"
 
     def __init_subclass__ (cls) -> None:
         super().__init_subclass__()
@@ -84,13 +92,25 @@ class SQLizer:
             descriptor.__set_name__(cls, name)
             setattr(cls, name, descriptor)
 
+    def to_dict (self) -> MappingAny:
+        """transforms `Model` to `dict[str, Any]`"""
+        return dict(self.__dict__)
+
+    def stringify (self, indent: bool = False) -> str:
+        """Tranforms `Model` to `JSON String`"""
+        return stringify(self.to_dict(), indent=indent)
+
     @staticmethod
     def GetConnection () -> Connection:
         """Get last opened `Instance: Connection`
-        - `NoConnectionAvailableException`"""
+        - `NoConnectionAvailableError`"""
         try: return Connection.GetInstance()
         except Exception:
-            raise NoConnectionAvailableException
+            raise NoConnectionAvailableError
+
+    # ------ #
+    # Select #
+    # ------ #
 
     @classmethod
     def Count (cls) -> int:
@@ -104,9 +124,10 @@ class SQLizer:
     @classmethod
     def Get (cls, **pk: SQLValue) -> Self:
         """Select columns of `Model` by named `PrimaryKey` values
-        - `NotFoundException`"""
+        - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
         pks, columns = cls.__data__.columns
-        assert pks, f"No PrimaryKey set for {cls}"
+        if not pks or not pk:
+            raise PrimaryKeyNotSetError(f"No PrimaryKey set for {cls.__name__}.Get({ pk })", obj=cls)
 
         connection = cls.GetConnection()
         infos = cls.__data__.infos
@@ -122,8 +143,7 @@ class SQLizer:
 
             # Combine where expression
             exp = info.column == pk_value
-            if where is E: where = exp
-            else: where.And(exp)
+            where = exp if where is E else where.And(exp)
 
         # GET
         result = connection.execute(
@@ -137,13 +157,13 @@ class SQLizer:
                 obj.__dict__.update(result.first)
                 return obj
             case 0:
-                raise NotFoundException(
+                raise NotFoundError(
                     f"No Result for {cls.__name__}.Get({ pk })",
                     cls = cls,
                     values = pk
                 )
             case _:
-                raise AssertionError(
+                raise MultipleResultsError(
                     f"Multiple Results({ result.returned }) for {cls.__name__}.Get({ pk }). "
                     f"PrimaryKey(s) should match 1 row only"
                 )
@@ -158,12 +178,77 @@ class SQLizer:
         columns = cls.__data__.columns
         return ModelSelect(*columns[0], *columns[1], model=cls)
 
-    def to_dict (self) -> MappingAny:
-        """transforms `Model` to `dict[str, Any]`"""
-        return dict(self.__dict__)
+    # ------ #
+    # Delete #
+    # ------ #
 
-    def stringify (self, indent: bool = False) -> str:
-        """Tranforms `Model` to `JSON String`"""
-        return stringify(self.to_dict(), indent=indent)
+    def Remove (self) -> None:
+        """Delete `Model` object by `PrimaryKey` values
+        - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
+        pks, _ = self.__data__.columns
+        if not pks:
+            raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self}", obj=self)
+
+        connection = self.GetConnection()
+
+        where = E
+        for pk in pks:
+            exp = pk == getattr(self, pk.name)
+            where = exp if where is E else where.And(exp)
+
+        delete = Delete(self.__data__.table).Where(where)
+        rowcount = connection.execute(delete).rowcount
+        match rowcount:
+            case 1: return
+            case 0: raise NotFoundError(
+                f"No Result for {self.__class__.__name__}().Remove()",
+                cls = type(self),
+                values = self.to_dict()
+            )
+            case _: raise MultipleResultsError(
+                f"Multiple Results({ rowcount }) for {self.__class__.__name__}().Remove({ self.to_dict() }). "
+                f"PrimaryKey(s) should match 1 row only"
+            )
+
+    @classmethod
+    def Delete (cls, raise_if_not_found: bool = True, **pk: SQLValue) -> bool:
+        """Delete `Model` by named `PrimaryKey` values
+        - Returns `deleted: bool`
+        - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
+        pks, _ = cls.__data__.columns
+        if not pks or not pk:
+            raise PrimaryKeyNotSetError(f"No PrimaryKey set for {cls.__name__}.Delete({ pk })", obj=cls)
+
+        connection = cls.GetConnection()
+        infos = cls.__data__.infos
+        pk_names = [pk.name for pk in pks]
+
+        # Validate name value
+        # Create Where Expression
+        where = E
+        for pk_name, pk_value in pk.items():
+            assert pk_name in pk_names, f"Mismatch PrimaryKey({ pk_name }) on {cls}. Expected {pk_names}"
+            info = infos[pk_name]
+            assert isinstance(pk_value, info.pytype), f"Mismatch PrimaryKey({ pk_name }) Value({pk_value!r}) on {cls}"
+
+            # Combine where expression
+            exp = info.column == pk_value
+            where = exp if where is E else where.And(exp)
+
+        # Delete
+        delete = Delete(cls.__data__.table).Where(where)
+        rowcount = connection.execute(delete).rowcount
+        match rowcount:
+            case 1: return True
+            case 0 if not raise_if_not_found: return False
+            case 0: raise NotFoundError(
+                f"No Result for {cls.__name__}.Delete({ pk })",
+                cls = cls,
+                values = pk
+            )
+            case _: raise MultipleResultsError(
+                f"Multiple Results({ rowcount }) for {cls.__name__}.Delete({ pk }). "
+                f"PrimaryKey(s) should match 1 row only"
+            )
 
 __all__ = ["SQLizer"]

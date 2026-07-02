@@ -1,18 +1,23 @@
 # internal
-from sqlize.shared import SQLValue
+from sqlize.shared import MappingAny
 
-class NotFoundException (Exception):
-    def __init__ (self, *args: object, cls: type, values: dict[str, SQLValue]) -> None:
+class MultipleResultsError  (AttributeError): ...
+class PrimaryKeyNotSetError (AttributeError): ...
+
+class NotFoundError (Exception):
+    def __init__ (self, *args: object, cls: type, values: MappingAny) -> None:
         super().__init__(*args)
         self.cls = cls
         self.values = values
 
-class NoConnectionAvailableException (Exception):
+class NoConnectionAvailableError (Exception):
     def __init__ (self) -> None:
         super().__init__("No connection available to use with ORM")
         self.add_note("Open Connection needed. Use Connection.AddInstance() and make sure to keep it alive")
 
 __all__ = [
-    "NotFoundException",
-    "NoConnectionAvailableException",
+    "NotFoundError",
+    "MultipleResultsError",
+    "PrimaryKeyNotSetError",
+    "NoConnectionAvailableError",
 ]

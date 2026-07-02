@@ -2,7 +2,7 @@
 from sqlize.column import Column, AliasedExpression, A
 from sqlize.dml import Select
 from sqlize.orm.interface import IModel
-from sqlize.orm.exceptions import NotFoundException
+from sqlize.orm.exceptions import NotFoundError
 
 class ModelSelect[T: IModel] (Select):
 
@@ -28,7 +28,7 @@ class ModelSelect[T: IModel] (Select):
         connection = self.model.GetConnection()
         if result := connection.execute(self):
             return self.model(result.first)
-        raise NotFoundException(
+        raise NotFoundError(
             f"No Result for {self.model.__name__}.Select().First()",
             cls = self.model,
             values = {}
