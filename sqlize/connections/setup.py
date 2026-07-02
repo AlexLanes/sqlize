@@ -177,6 +177,8 @@ class Cursor:
         self.close()
         return ResultSQL(rowcount, len(rows), columns, rows)
 
+CONNECTIONS = list["Connection"]()
+
 class Connection (SupportParameters):
     """Wrapper to a driver Connection with support to `execute(statement)`
     - `IConnectionPEP249 => "DB API 2.0"` Interface to `commit` `rollback` `close` `Cursor`
@@ -189,11 +191,14 @@ class Connection (SupportParameters):
 
     def __repr__ (self) -> str:
         name = (
-            f"'{conn.__module__}.{conn.__class__.__name__}'"
-            if (conn := getattr(self, "conn", False))
+            f"{self.conn.__module__}.{self.conn.__class__.__name__}"
+            if self
             else "closed"
         )
-        return f"<Connection => {name}>"
+        return f"<Connection => {name!r} ID({id(self)})>"
+
+    def __bool__ (self) -> bool:
+        return hasattr(self, "conn")
 
     def __enter__ (self) -> Self:
         return self
@@ -201,9 +206,36 @@ class Connection (SupportParameters):
     def __exit__ (self, *_) -> None:
         self.close()
 
+    def AddInstance (self) -> Self:
+        """Add `Instance: Connection` to be accessible by `GetInstance()`"""
+        CONNECTIONS.append(self)
+        return self
+
+    @classmethod
+    def GetInstance (cls) -> Self:
+        """Get last opened `Instance: Connection`"""
+        global CONNECTIONS
+        CONNECTIONS = [
+            connection
+            for connection in CONNECTIONS
+            if connection
+        ]
+
+        for connection in reversed(CONNECTIONS):
+            if cls is Connection or isinstance(connection, cls):
+                return connection # type: ignore
+
+        raise Exception(f"No opened Connection found for {cls}")
+
     def close (self) -> None:
+        if not self:
+            return
+
         self.conn.close()
         del self.conn
+
+        if self in CONNECTIONS:
+            CONNECTIONS.remove(self)
 
     def commit (self) -> None:
         self.conn.commit()
@@ -241,14 +273,13 @@ class Connection (SupportParameters):
             .to_sql()
         )
 
-        print("", "--- SQL ---", sql, "", "--- PARAMS ---", sep="\n")
+        print("--- SQL ---", sql, "", "--- PARAMS ---", sep="\n")
         if params and isinstance(params[0], (tuple, list)):
             print(*params, sep="\n")
         else: print(params)
     
         print("\n--- Result ---")
         self.execute(statement, **kwargs).print()
-        print()
 
 __all__ = [
     "ResultSQL",
