@@ -1,13 +1,10 @@
 # std
 from __future__ import annotations
-from json import dumps
-from decimal import Decimal
 from dataclasses import dataclass
-from datetime import datetime, date, time
-from typing import Protocol, Any, Self, Iterator, Callable
+from typing import Protocol, Self, Iterator, Callable
 # internal
 from sqlize.parameters import *
-from sqlize.shared import SequenceAny, ManySequenceAny, MappingAny, SQLValue
+from sqlize.shared import SequenceAny, ManySequenceAny, MappingAny, SQLValue, stringify
 from sqlize.supports import ExecutableStatement, SupportParameters
 
 class ICursorPEP249 (Protocol):
@@ -102,28 +99,8 @@ class ResultSQL:
         return list(self)
 
     def stringify (self, indent: bool = False) -> str:
-        """Transform of `result.to_dict()` to `JSON String`"""
-        def defaults (item: Any) -> Any:
-            match item:
-                case datetime(): return item.isoformat(sep="T", timespec="seconds")
-                case time(): return item.isoformat(timespec="seconds")
-                case date(): return item.isoformat()
-                case Decimal(): return float(item)
-                case 1 if hasattr(item, "__iter__"):
-                    return [defaults(x) for x in item]
-                case 1 if hasattr(item, "__dict__"):
-                    return {
-                        str(key): defaults(value)
-                        for key, value in (item.__dict__ or {}).items()
-                    }
-                case _: return str(item)
-
-        return dumps(
-            self.to_dict(),
-            indent = 4 if indent else None,
-            default = defaults,
-            ensure_ascii = False,
-        )
+        """Transforms `result.to_dict()` to `JSON String`"""
+        return stringify(self.to_dict(), indent)
 
     def print (self) -> None:
         """Print to `console`"""

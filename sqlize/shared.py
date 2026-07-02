@@ -1,6 +1,10 @@
 # std
 from __future__ import annotations
 from dataclasses import dataclass
+from json import dumps
+from decimal import Decimal
+from dataclasses import dataclass
+from datetime import datetime, date, time
 from typing import (
     Any, Self, overload,
     Iterable, Sequence, Mapping
@@ -29,6 +33,34 @@ def indent (sql: str) -> str:
     return "\n".join(
         "    " + line
         for line in sql.split("\n")
+    )
+
+def stringify (item: Any, indent: bool = False) -> str:
+    """Transforms `item` to `JSON String`"""
+    def defaults (item: Any) -> Any:
+        match item:
+            case str(): return item
+            case None: return "null"
+            case bool(): return "true" if item else "false"
+            case int() | float(): return "null"
+            case datetime(): return item.isoformat(sep="T", timespec="seconds")
+            case time(): return item.isoformat(timespec="seconds")
+            case date(): return item.isoformat()
+            case Decimal(): return float(item)
+            case 1 if hasattr(item, "__iter__"):
+                return [defaults(x) for x in item]
+            case 1 if hasattr(item, "__dict__"):
+                return {
+                    str(key): defaults(value)
+                    for key, value in (item.__dict__ or {}).items()
+                }
+            case _: return str(item)
+
+    return dumps(
+        item,
+        indent = 4 if indent else None,
+        default = defaults,
+        ensure_ascii = False,
     )
 
 @dataclass(kw_only=True)
@@ -108,6 +140,7 @@ __all__ = [
     "DataSQL",
     "SQLValue",
     "TableData",
+    "stringify",
     "ColumnData",
     "MappingAny",
     "SequenceAny",
