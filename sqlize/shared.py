@@ -39,20 +39,19 @@ def stringify (item: Any, indent: bool = False) -> str:
     """Transforms `item` to `JSON String`"""
     def defaults (item: Any) -> Any:
         match item:
-            case str(): return item
             case None: return "null"
             case bool(): return "true" if item else "false"
-            case int() | float(): return "null"
+            case str() | int() | float(): return item
             case datetime(): return item.isoformat(sep="T", timespec="seconds")
             case time(): return item.isoformat(timespec="seconds")
             case date(): return item.isoformat()
             case Decimal(): return float(item)
-            case 1 if hasattr(item, "__iter__"):
+            case _ if hasattr(item, "__iter__"):
                 return [defaults(x) for x in item]
-            case 1 if hasattr(item, "__dict__"):
+            case _ if data := getattr(item, "__dict__", {}):
                 return {
                     str(key): defaults(value)
-                    for key, value in (item.__dict__ or {}).items()
+                    for key, value in data.items()
                 }
             case _: return str(item)
 
