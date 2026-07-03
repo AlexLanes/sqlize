@@ -54,7 +54,7 @@ class ColumnInfo:
     column: C
     is_pk: bool
 
-@dataclass(slots=True, frozen=True)
+@dataclass(frozen=True)
 class ModelData:
     table: Table
     infos: dict[str, ColumnInfo]
