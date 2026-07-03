@@ -311,14 +311,14 @@ class SQLizer:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self.__class__.__name__}().Update()", obj=type(self))
 
         infos = data.infos
-        for pk_name, value in columns.items():
-            if pk_name not in infos:
+        for name, value in columns.items():
+            if name not in infos:
                 raise AttributeError(
-                    f"Unexpected atribute for {self.__class__.__name__}().Update({pk_name}={value!r})",
-                    name = pk_name,
+                    f"Unexpected atribute for {self.__class__.__name__}().Update({name}={value!r})",
+                    name = name,
                     obj = self
                 )
-            setattr(self, pk_name, value)
+            setattr(self, name, value)
 
         pk_name = data.alias.get(pk.name, pk.name)
         pk_value = getattr(self, pk_name)
@@ -328,6 +328,7 @@ class SQLizer:
                 .Set(**{
                     info.column.name: getattr(self, name)
                     for name, info in data.infos.items()
+                    if not info.is_pk
                 })
                 .Where(pk == pk_value)
             )
