@@ -12,8 +12,16 @@ class Column[T: SQLValue]:
 
     column: C
 
-    def __init__ (self, column: C) -> None:
-        self.column = column
+    @overload
+    def __init__ (self, *, column: C) -> None: ...
+    @overload
+    def __init__ (self, *, alias: str) -> None: ...
+    def __init__ (self, **kwargs) -> None:
+        if (column := kwargs.get("column")) is not None:
+            self.column = column
+        elif (alias := kwargs.get("alias")) is not None:
+            self.column = alias
+        else: raise ValueError("Unexpected **kwargs for Column")
 
     def __set_name__ (self, _, name: str) -> None:
         self.name = name
@@ -59,11 +67,17 @@ class ModelData:
     table: Table
     infos: dict[str, ColumnInfo]
     """`{ property_name: ColumnInfo }`"""
+    alias: dict[str, str]
+    """`{ alias: property_name }`"""
 
     @property
     def all_columns (self) -> list[C]:
         """PK + Columns"""
-        return [*self.primary_keys, *self.columns]
+        return (
+            [self.primary_key, *self.columns]
+            if self.primary_key is not None
+            else list(self.columns)
+        )
 
     @cached_property
     def columns (self) -> list[C]:
@@ -75,17 +89,14 @@ class ModelData:
         ]
 
     @cached_property
-    def primary_keys (self) -> list[C]:
-        """Only Primary Key"""
-        return [
-            info.column
-            for info in self.infos.values()
-            if info.is_pk
-        ]
-
-    @property
-    def has_pk (self) -> bool:
-        return bool(self.primary_keys)
+    def primary_key (self) -> C | None:
+        return (
+            [
+                info.column
+                for info in self.infos.values()
+                if info.is_pk
+            ] or [None]
+        )[0]
 
 __all__ = [
     "Column",

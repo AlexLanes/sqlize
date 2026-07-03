@@ -1,6 +1,8 @@
 # internal
 from sqlize.shared import MappingAny
 
+class InsertError (ValueError): ...
+class UpdateError (ValueError): ...
 class MultipleResultsError  (AttributeError): ...
 class PrimaryKeyNotSetError (AttributeError): ...
 
@@ -16,6 +18,8 @@ class NoConnectionAvailableError (Exception):
         self.add_note("Open Connection needed. Use Connection.AddInstance() and make sure to keep it alive")
 
 __all__ = [
+    "UpdateError",
+    "InsertError",
     "NotFoundError",
     "MultipleResultsError",
     "PrimaryKeyNotSetError",
