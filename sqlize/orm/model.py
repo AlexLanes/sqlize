@@ -84,9 +84,8 @@ class SQLizer:
         if not isinstance(table, Table):
             table = Table(str(table), None)
 
-        columns = ([], [])
         infos: dict[str, ColumnInfo] = {}
-        cls.__data__ = ModelData(table, infos, columns)
+        cls.__data__ = ModelData(table, infos)
 
         for name, hint in get_type_hints(cls, include_extras=True).items():
             origin = get_origin(hint)
@@ -102,8 +101,7 @@ class SQLizer:
             # Class.attribute -> Column[T]
             pytype = get_args(hint)[0]
             column = table.Column(name)
-            columns[0 if is_pk else 1].append(column)
-            infos[name] = ColumnInfo(name, pytype, column)
+            infos[name] = ColumnInfo(pytype, column, is_pk)
 
             # Instance.attribute -> T
             descriptor = origin(column)
@@ -143,13 +141,13 @@ class SQLizer:
     def Get (cls, **pk: SQLValue) -> Self:
         """Select columns of `Model` by named `PrimaryKey` values
         - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
-        pks, columns = cls.__data__.columns
-        if not pks or not pk:
+        data = cls.__data__
+        if not data.has_pk or not pk:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {cls.__name__}.Get({ pk })", obj=cls)
 
         connection = cls.GetConnection()
-        infos = cls.__data__.infos
-        pk_names = [pk.name for pk in pks]
+        pk_names = [pk.name for pk in data.primary_keys]
+        infos = data.infos
 
         # Validate name value
         # Create Where Expression
@@ -165,8 +163,8 @@ class SQLizer:
 
         # GET
         result = connection.execute(
-            Select(*pks, *columns)
-            .From(cls.__data__.table)
+            Select(*data.all_columns)
+            .From(data.table)
             .Where(where)
         )
         match result.returned:
@@ -190,8 +188,7 @@ class SQLizer:
         ### Example
         `Model.Select().Where(Model.id < 100).All()`  
         `Model.Select().OrderBy(Model.id.DESC).Limit(1).First()`"""
-        columns = cls.__data__.columns
-        return ModelSelect(*columns[0], *columns[1], model=cls)
+        return ModelSelect(*cls.__data__.all_columns, model=cls)
 
     # ------ #
     # Delete #
@@ -200,18 +197,18 @@ class SQLizer:
     def Remove (self) -> None:
         """Delete `Model` object by `PrimaryKey` values
         - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
-        pks, _ = self.__data__.columns
-        if not pks:
+        data = self.__data__
+        if not data.has_pk:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self}", obj=self)
 
         connection = self.GetConnection()
 
         where = E
-        for pk in pks:
+        for pk in data.primary_keys:
             exp = pk == getattr(self, pk.name)
             where = exp if where is E else where.And(exp)
 
-        delete = Delete(self.__data__.table).Where(where)
+        delete = Delete(data.table).Where(where)
         rowcount = connection.execute(delete).rowcount
         match rowcount:
             case 1: return
@@ -230,13 +227,13 @@ class SQLizer:
         """Delete `Model` by named `PrimaryKey` values
         - Returns `deleted: bool`
         - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
-        pks, _ = cls.__data__.columns
-        if not pks or not pk:
+        data = cls.__data__
+        if not data.has_pk or not pk:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {cls.__name__}.Delete({ pk })", obj=cls)
 
         connection = cls.GetConnection()
-        infos = cls.__data__.infos
-        pk_names = [pk.name for pk in pks]
+        pk_names = [pk.name for pk in data.primary_keys]
+        infos = data.infos
 
         # Validate name value
         # Create Where Expression
@@ -251,7 +248,7 @@ class SQLizer:
             where = exp if where is E else where.And(exp)
 
         # Delete
-        delete = Delete(cls.__data__.table).Where(where)
+        delete = Delete(data.table).Where(where)
         rowcount = connection.execute(delete).rowcount
         match rowcount:
             case 1: return True
@@ -274,13 +271,13 @@ class SQLizer:
         """Update columns of `Model` by `PrimaryKey` values
         - `update` used to update `self` before executing `Update`
         - `NotFoundError` `PrimaryKeyNotSetError` `MultipleResultsError`"""
-        pks, columns = self.__data__.columns
-        if not pks:
+        data = self.__data__
+        if not data.has_pk:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self}", obj=self)
 
         connection = self.GetConnection()
 
-        infos = self.__data__.infos
+        infos = data.infos
         for name, value in update.items():
             if name not in infos:
                 raise AttributeError(
@@ -291,15 +288,15 @@ class SQLizer:
             setattr(self, name, value)
 
         where = E
-        for pk in pks:
+        for pk in data.primary_keys:
             exp = pk == getattr(self, pk.name)
             where = exp if where is E else where.And(exp)
 
         result = connection.execute(
-            Update(self.__data__.table)
+            Update(data.table)
             .Set(**{
                 column.name: getattr(self, column.name)
-                for column in columns
+                for column in data.columns
             })
             .Where(where)
         )
@@ -319,16 +316,23 @@ class SQLizer:
     def Refresh (self) -> Self:
         """Refresh Columns of `Model` object by `PrimaryKey` values
         - `NotFoundError` `PrimaryKeyNotSetError`"""
-        pks, columns = self.__data__.columns
-        if not pks:
+        data = self.__data__
+        if not data.has_pk:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self}", obj=self)
 
-        updated = self.Get(**{ pk.name: getattr(self, pk.name) for pk in pks })
-        for column in columns:
+        updated = self.Get(**{
+            pk.name: getattr(self, pk.name)
+            for pk in data.primary_keys
+        })
+        for column in data.columns:
             name = column.name
             value = getattr(updated, name)
             setattr(self, name, value)
 
         return self
+
+    # ------ #
+    # Insert #
+    # ------ #
 
 __all__ = ["SQLizer"]

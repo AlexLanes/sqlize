@@ -1,5 +1,6 @@
 # std
 from dataclasses import dataclass
+from functools import cached_property
 from typing import overload, override
 # internal
 from sqlize.shared import SQLValue
@@ -49,17 +50,42 @@ class PrimaryKey[T: SQLValue] (Column[T]):
 
 @dataclass(slots=True, frozen=True)
 class ColumnInfo:
-    name: str
     pytype: type
     column: C
+    is_pk: bool
 
-@dataclass
+@dataclass(slots=True, frozen=True)
 class ModelData:
     table: Table
     infos: dict[str, ColumnInfo]
     """`{ property_name: ColumnInfo }`"""
-    columns: tuple[list[C], list[C]]
-    """`([PrimaryKey], [Column])`"""
+
+    @property
+    def all_columns (self) -> list[C]:
+        """PK + Columns"""
+        return [*self.primary_keys, *self.columns]
+
+    @cached_property
+    def columns (self) -> list[C]:
+        """No Primary Key"""
+        return [
+            info.column
+            for info in self.infos.values()
+            if not info.is_pk
+        ]
+
+    @cached_property
+    def primary_keys (self) -> list[C]:
+        """Only Primary Key"""
+        return [
+            info.column
+            for info in self.infos.values()
+            if info.is_pk
+        ]
+
+    @property
+    def has_pk (self) -> bool:
+        return bool(self.primary_keys)
 
 __all__ = [
     "Column",
