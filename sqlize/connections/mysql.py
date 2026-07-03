@@ -14,8 +14,6 @@ try:
 except ImportError:
     raise ImportError("Optional dependency [mysql] needed to use 'sqlize.connections.mysql'")
 
-# TODO testar os espaços no MySQL
-
 class MyCursor (Cursor):
 
     cursor: cursor
