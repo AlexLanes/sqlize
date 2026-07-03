@@ -56,12 +56,15 @@ class SQLizer:
         # PrimaryKey and other Columns captured
         print(user_2.id, user_2.name)
 
-        # Update
+        # Update Columns
         user_1.name = "Foo"
+        user_1.Update()
+        # Simplified
         user_1.Update(name="Foo")
-        # Refresh Columns
+
+        # Refresh Columns Values
+        user_1.name = "Foo"
         user_1.Refresh()
-        user_1 = user_1.Update(name="Foo")
 
         # Delete PK
         deleted = Users.Delete(1, raise_if_not_found=True)
