@@ -35,36 +35,39 @@ POSITIONAL_PARAMETERS: dict[str, type[IPositionalParameter]] = {
 
 DB_DRIVER_PARAMSTYLE: dict[str, tuple[Positionals, tuple[bool, str] | None]] = {
     # SQLite
-    "sqlite3":   ("?", None),
+    "sqlite3":      ("?", None),
     # ODBC
-    "pyodbc":    ("?", None),
+    "pyodbc":       ("?", None),
     # PostgreSQL
-    "psycopg2":  ("%s", None),
-    "psycopg":   ("%s", None),
-    "pg8000":    ("%s", None),
+    "psycopg2":     ("%s", None),
+    "psycopg":      ("%s", None),
+    "pg8000":       ("%s", None),
     # MySQL / MariaDB
-    "mysqldb":   ("%s", (False, "`")),
-    "pymysql":   ("%s", (False, "`")),
-    "mariadb":   ("?",  (False, "`")),
+    "mysql":        ("%s", (False, "`")),
+    "mysqldb":      ("%s", (False, "`")),
+    "pymysql":      ("%s", (False, "`")),
+    "mariadb":      ("?",  (False, "`")),
     # SQL Server
-    "pymssql":   ("%s", (False, "[")),
+    "pymssql":      ("%s", (False, "[")),
+    "mssql_python": ("%s", (False, "[")),
     # Oracle
-    "oracledb":  (":N", (True, '"')),
-    "cx_oracle": (":N", (True, '"')),
+    "oracledb":     (":N", (True, '"')),
+    "cx_oracle":    (":N", (True, '"')),
     # DuckDB
-    "duckdb":    ("?", None),
+    "duckdb":       ("?", None),
 }
 
 def guess_driver_parameter (driver: object) -> tuple[Positionals, tuple[bool, str] | None]:
-    module_name = driver.__class__.__module__.lower().strip()
+    module_name = driver.__class__.__module__.lower().split(".")[0]
     if parameter := DB_DRIVER_PARAMSTYLE.get(module_name):
         return parameter
 
     name = module_name + driver.__class__.__name__.lower().strip()
     guesses = [
         ("oracle", ":N", (True, '"')),
-        ("mysql", "%s", (False, "`")),
-        ("pg", "%s", (False, '"')),
+        ("mysql",  "%s", (False, "`")),
+        ("mssql",  "%s", (False, "[")),
+        ("pg",     "%s", (False, '"')),
     ]
 
     for db_db, parameter, quote_info in guesses:

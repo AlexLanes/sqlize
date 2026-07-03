@@ -29,7 +29,7 @@ class MyCursor (Cursor):
         return self.cursor.lastrowid or None
 
 class MySQL (C):
-    """`Connection` for `MySQL` database using external `PyMySQL`
+    """`Connection` for `MySQL` database using external `mysql-connector-python`
     - `MySQL(host=..., user=..., password=..., database=...)`"""
 
     conn: connection
