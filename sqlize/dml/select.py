@@ -156,7 +156,10 @@ class Union (Queryable):
                 case None: pass
                 case str(): sql_parts.append(item)
                 case Queryable() as query:
-                    sql, params = query.to_sql(render_cte=render_cte, use_parameter=use_parameter)
+                    sql, params = (
+                        query.set_parameter(self.data.parameter, self.data.quote_info)
+                        .to_sql(render_cte=render_cte, use_parameter=use_parameter)
+                    )
                     sql_parts.append(sql_format(sql, params))
                 case _: raise ValueError(
                     f"Invalid item found on Union: {item!r}"
@@ -164,8 +167,7 @@ class Union (Queryable):
 
         spaced = False
         for data in (self.data.data_orderby(), self.data.data_paging()):
-            if data is None:
-                continue
+            if data is None: continue
             spaced = spaced or (sql_parts.append("") is None)
             sql_parts.append(sql_format(data.join(), data))
 
@@ -173,11 +175,11 @@ class Union (Queryable):
 
     def Union (self, select: Select) -> Union:
         """Apply `self UNION {select}`"""
-        return Union(False, self, select)
+        return Union(False, self, select).set_parameter(self.data.parameter, self.data.quote_info)
 
     def UnionAll (self, select: Select) -> Union:
         """Apply `self UNION ALL {select}`"""
-        return Union(True, self, select)
+        return Union(True, self, select).set_parameter(self.data.parameter, self.data.quote_info)
 
     def AsCte (self, name: str) -> CteTable:
         """Transform `Union` into a `CTE` that works as a `Table`"""
@@ -331,7 +333,11 @@ class Select (Queryable, SupportsWhere):
         cte_parts, cte_params = ["WITH"], []
 
         for cte in cte_tables:
-            sql, params = cte._q_.to_sql(render_cte=False, use_parameter=False)
+            sql, params = (
+                cte._q_
+                .set_parameter(self.data.parameter, self.data.quote_info)
+                .to_sql(render_cte=False, use_parameter=False)
+            )
             cte_params.extend(params)
             cte_parts.extend((
                 f"{cte._td_.name} AS (",
@@ -438,7 +444,7 @@ class Select (Queryable, SupportsWhere):
         .Limit(3)
         ```
         """
-        return Union(False, self, select)
+        return Union(False, self, select).set_parameter(self.data.parameter, self.data.quote_info)
 
     def UnionAll (self, select: Select) -> Union:
         """Apply `self UNION ALL {select}`
@@ -459,6 +465,6 @@ class Select (Queryable, SupportsWhere):
         .Limit(3)
         ```
         """
-        return Union(True, self, select)
+        return Union(True, self, select).set_parameter(self.data.parameter, self.data.quote_info)
 
 __all__ = ["Select"]
