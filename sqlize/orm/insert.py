@@ -1,6 +1,5 @@
 # std
 from typing import Callable
-from functools import reduce
 # internal
 from sqlize.shared import SQLValue
 from sqlize.table import Table
@@ -96,15 +95,13 @@ class ModelInsert[T: IModel]:
             return model(**result.first)
 
         # Get Last by Values Inserted
-        select = ModelSelect(*data.all_columns, model=model)\
-            .Where(reduce(
-                lambda l, r: l.And(r),
-                (
-                    info.column == insert[name]
-                    for name, info in data.infos.items()
-                    if name in insert
-                )
-            )
+        select = (
+            ModelSelect(*data.all_columns, model=model)
+            .WhereEquals(*(
+                info.column == insert[name]
+                for name, info in data.infos.items()
+                if name in insert
+            ))
         )
         total = select.Count()
         return select.Offset(total - 1).First()
@@ -125,13 +122,10 @@ class ModelInsert[T: IModel]:
         # Get Last by Values Inserted
         return (
             ModelSelect(*data.all_columns, model=model)
-            .Where(reduce(
-                lambda l, r: l.And(r),
-                (
-                    info.column == insert[name]
-                    for name, info in data.infos.items()
-                    if name in insert
-                )
+            .WhereEquals(*(
+                info.column == insert[name]
+                for name, info in data.infos.items()
+                if name in insert
             ))
             .All()
             [-1]

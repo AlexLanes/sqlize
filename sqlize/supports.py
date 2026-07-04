@@ -1,4 +1,5 @@
 # std
+from functools import reduce
 from typing import Self, Protocol
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -6,7 +7,7 @@ from dataclasses import dataclass, field
 from sqlize.parameters import *
 from sqlize.shared import SequenceAny, ManySequenceAny, DataSQL, quote
 from sqlize.expression import Expression, OrderableExpression, AliasedExpression
-from sqlize.column import Column, AliasedColumn
+from sqlize.column import Column, AliasedColumn, ColumnEqualsValue
 from sqlize.table import Table
 
 @dataclass
@@ -118,6 +119,19 @@ class SupportsWhere (SupportsData):
         `Where( (users.role == "admin") & (users.name != None) )`  
         """
         self.data.where = expression
+        return self
+
+    def WhereEquals (self, *values: ColumnEqualsValue) -> Self:
+        """Apply `WHERE {expression}`
+        #### A `Column` can build `Expression`
+        #### See `sqlize.E` docstring for more info
+        # Example
+        `WhereEquals(T.users.id == 1, T.users.name == "Foo")`
+        """
+        self.data.where = None if not values else reduce(
+            lambda l, r: l.And(r),
+            values
+        )
         return self
 
 class SupportsOrderBy (SupportsData):
