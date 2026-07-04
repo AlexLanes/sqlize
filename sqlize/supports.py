@@ -194,7 +194,7 @@ class SupportsPaging (SupportsData):
     def FetchFirstRowsOnly (self, value: int | None) -> Self:
         """Apply `FETCH FIRST {value} ROWS ONLY`
         - `None` do nothing
-        #### Supported By: `PostgreSQL` `Oracle`"""
+        #### Supported By: `PostgreSQL` `Oracle` `MicrosoftSQL` """
         if value is None:
             return self
         if value <= 0:
