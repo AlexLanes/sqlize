@@ -3,7 +3,12 @@
 Create SQL syntax with a natural python builder.  
 Supports automatic execution on multiple `sqlize.connections`
 
-### Table | Column | Expression
+### Installation
+> `uv add` **"git+https://github.com/AlexLanes/sqlize@v1.0"**  
+> `uv add` **"https://github.com/AlexLanes/sqlize/releases/download/v1.0/sqlize-1.0-py3-none-any.whl"**
+
+
+## Table | Column | Expression
 > See `E` docstring for full info on `Expression`
 ```python
 from sqlize import E, A, T
@@ -33,7 +38,7 @@ E.TRUE
 E.Value("1")
 ```
 
-### DMLs
+## DMLs
 `Select` `Update` `Delete` `Insert` `InsertMany` `Upsert`
 > See `docstring` of each `Statement` for more info and examples
 ```python
@@ -68,7 +73,7 @@ select = (
 sql, params = select.to_sql()
 ```
 
-### Connections
+## Connections
 Package to automatically handle `Connections` of drivers and execute `Statements`
 - `Connection(conn)` Simplified wrapper to `DB API 2.0`
 - `ResultSQL` `@dataclass` used by `cursor.execute() cursor.executemany() Connection.execute()`
@@ -105,7 +110,7 @@ with SQLite() as conn:
     conn.columns("users")
 ```
 
-### ORM
+## ORM
 Package for `Object Relational Mapping`
 
 > Use `sqlize.orm.introspect` to auto generate `Model`
