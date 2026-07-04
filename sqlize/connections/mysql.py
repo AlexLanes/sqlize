@@ -9,14 +9,14 @@ from sqlize.connections.setup import Connection as C, Cursor
 # external
 try:
     from mysql.connector import connect
-    from mysql.connector.cursor import MySQLCursor as cursor
+    from mysql.connector.cursor import MySQLCursor as cursorSQL
     from mysql.connector.connection import MySQLConnection as connection
 except ImportError:
     raise ImportError("Optional dependency [mysql] needed to use 'sqlize.connections.mysql'")
 
-class MyCursor (Cursor):
+class CursorSQL (Cursor):
 
-    cursor: cursor
+    cursor: cursorSQL
 
     @override
     def close (self) -> None:
@@ -96,11 +96,11 @@ class MySQL (C):
                 SELECT
                     column_name AS name,
                     data_type AS type,
+                    column_key = 'PRI' AS is_pk,
                     is_nullable = 'YES' AS is_nullable,
                     column_default IS NOT NULL AS has_default
                 FROM information_schema.columns
-                WHERE table_schema = DATABASE()
-                    AND table_name = %s
+                WHERE table_name = %s
                 ORDER BY ordinal_position
             """
             params: SequenceAny = (table,)
@@ -109,12 +109,13 @@ class MySQL (C):
                 SELECT
                     column_name AS name,
                     data_type AS type,
+                    column_key = 'PRI' AS is_pk,
                     is_nullable = 'YES' AS is_nullable,
                     column_default IS NOT NULL AS has_default
                 FROM information_schema.columns
                 WHERE table_schema = %s
                     AND table_name = %s
-                ORDER BY ordinal_position
+                ORDER BY ordinal_position;
             """
             params = (schema, table)
 
@@ -122,6 +123,7 @@ class MySQL (C):
             ColumnData(**{
                 "name": item["name"],
                 "type": item["type"],
+                "is_pk": item["is_pk"],
                 "is_nullable": item["is_nullable"] == 1,
                 "has_default": item["has_default"] == 1,
             })
@@ -129,7 +131,7 @@ class MySQL (C):
         ]
 
     @override
-    def cursor (self) -> Cursor:
-        return MyCursor(self.conn.cursor()) # type: ignore
+    def cursor (self) -> CursorSQL:
+        return CursorSQL(self.conn.cursor()) # type: ignore
 
 __all__ = ["MySQL"]

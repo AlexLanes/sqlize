@@ -74,6 +74,7 @@ class MicrosoftSQL (C):
             ColumnData(
                 name = row.column_name,
                 type = row.type_name,
+                is_pk = row.ss_is_identity == 1,
                 is_nullable = bool(row.nullable),
                 has_default = row.column_def is not None,
             )

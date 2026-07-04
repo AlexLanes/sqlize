@@ -72,6 +72,7 @@ class TableData:
 class ColumnData:
     name: str
     type: str
+    is_pk: bool = False
     is_nullable: bool
     has_default: bool
 

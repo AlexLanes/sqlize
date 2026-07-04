@@ -108,24 +108,45 @@ class Oracle (C):
         if schema is None:
             sql = """
                 SELECT
-                    COLUMN_NAME AS "name",
-                    DATA_TYPE AS "type",
-                    NULLABLE = 'Y' AS "is_nullable",
-                    DATA_DEFAULT IS NOT NULL AS "has_default"
-                FROM ALL_TAB_COLUMNS
-                WHERE OWNER = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AND TABLE_NAME = :1
-                ORDER BY COLUMN_ID
+                    c.COLUMN_NAME AS "name",
+                    c.DATA_TYPE AS "type",
+                    c.NULLABLE = 'Y' AS "is_nullable",
+                    c.DATA_DEFAULT IS NOT NULL AS "has_default",
+                    EXISTS (
+                        SELECT 1
+                        FROM ALL_CONSTRAINTS ac
+                        JOIN ALL_CONS_COLUMNS acc
+                        ON ac.OWNER = acc.OWNER AND ac.CONSTRAINT_NAME = acc.CONSTRAINT_NAME
+                        WHERE ac.CONSTRAINT_TYPE = 'P'
+                            AND ac.OWNER = c.OWNER
+                            AND ac.TABLE_NAME = c.TABLE_NAME
+                            AND acc.COLUMN_NAME = c.COLUMN_NAME
+                    ) AS "is_pk"
+                FROM ALL_TAB_COLUMNS c
+                WHERE c.OWNER = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+                    AND c.TABLE_NAME = :1
+                ORDER BY c.COLUMN_ID;
             """
             params = [table.upper()]
 
         else:
             sql = """
                 SELECT
-                    COLUMN_NAME AS "name",
-                    DATA_TYPE AS "type",
-                    NULLABLE = 'Y' AS "is_nullable",
-                    DATA_DEFAULT IS NOT NULL AS "has_default"
-                FROM ALL_TAB_COLUMNS
+                    c.COLUMN_NAME AS "name",
+                    c.DATA_TYPE AS "type",
+                    c.NULLABLE = 'Y' AS "is_nullable",
+                    c.DATA_DEFAULT IS NOT NULL AS "has_default",
+                    EXISTS (
+                        SELECT 1
+                        FROM ALL_CONSTRAINTS ac
+                        JOIN ALL_CONS_COLUMNS acc
+                        ON ac.OWNER = acc.OWNER AND ac.CONSTRAINT_NAME = acc.CONSTRAINT_NAME
+                        WHERE ac.CONSTRAINT_TYPE = 'P'
+                            AND ac.OWNER = c.OWNER
+                            AND ac.TABLE_NAME = c.TABLE_NAME
+                            AND acc.COLUMN_NAME = c.COLUMN_NAME
+                    ) AS "is_pk"
+                FROM ALL_TAB_COLUMNS c
                 WHERE OWNER = :1 AND TABLE_NAME = :2
                 ORDER BY COLUMN_ID
             """

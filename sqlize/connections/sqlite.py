@@ -73,6 +73,7 @@ class SQLite (C):
             ColumnData(
                 name = item["name"],
                 type = item["type"],
+                is_pk = item["pk"] == 1,
                 is_nullable = item["pk"] != 1 and item["notnull"] == 0,
                 has_default = item["dflt_value"] is not None,
             )

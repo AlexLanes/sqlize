@@ -98,26 +98,50 @@ class PostgreSQL (C):
         """List Columns Data of `table` and `schema`"""
         if schema is None:
             sql = """
-                SELECT column_name AS name,
-                       data_type AS type,
-                       is_nullable = 'YES' AS is_nullable,
-                       column_default IS NOT NULL AS has_default
-                FROM information_schema.columns
-                WHERE table_name = %s
-                    AND table_schema = ANY(current_schemas(false))
-                ORDER BY ordinal_position
+                SELECT
+                    c.column_name AS name,
+                    c.data_type AS type,
+                    c.is_nullable = 'YES' AS is_nullable,
+                    c.column_default IS NOT NULL AS has_default,
+                    EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints tc
+                        JOIN information_schema.key_column_usage kcu
+                            ON tc.constraint_name = kcu.constraint_name
+                        AND tc.table_schema = kcu.table_schema
+                        WHERE tc.constraint_type = 'PRIMARY KEY'
+                        AND tc.table_schema = c.table_schema
+                        AND tc.table_name = c.table_name
+                        AND kcu.column_name = c.column_name
+                    ) AS is_pk
+                FROM information_schema.columns c
+                WHERE c.table_name = %s
+                    AND c.table_schema = ANY(current_schemas(false))
+                ORDER BY c.ordinal_position;
             """
             params = (table,)
         else:
             sql = """
-                SELECT column_name AS name,
-                       data_type AS type,
-                       is_nullable = 'YES' AS is_nullable,
-                       column_default IS NOT NULL AS has_default
-                FROM information_schema.columns
-                WHERE table_name = %s
-                    AND table_schema = %s
-                ORDER BY ordinal_position
+                SELECT
+                    c.column_name AS name,
+                    c.data_type AS type,
+                    c.is_nullable = 'YES' AS is_nullable,
+                    c.column_default IS NOT NULL AS has_default,
+                    EXISTS (
+                        SELECT 1
+                        FROM information_schema.table_constraints tc
+                        JOIN information_schema.key_column_usage kcu
+                            ON tc.constraint_name = kcu.constraint_name
+                        AND tc.table_schema = kcu.table_schema
+                        WHERE tc.constraint_type = 'PRIMARY KEY'
+                        AND tc.table_schema = c.table_schema
+                        AND tc.table_name = c.table_name
+                        AND kcu.column_name = c.column_name
+                    ) AS is_pk
+                FROM information_schema.columns c
+                WHERE c.table_name = %s
+                    AND c.table_schema = %s
+                ORDER BY c.ordinal_position;
             """
             params = (table, schema)
 
