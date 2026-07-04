@@ -1,5 +1,5 @@
 """Package for `Object Relational Mapping`
-#### Use `introspect` to auto generate `Model`
+#### Use `sqlize.orm.introspect` to auto generate `Model`
 #### See `sqlize.orm.SQLizer` docstring for more info"""
 
 from sqlize.orm import exceptions

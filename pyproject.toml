@@ -1,6 +1,7 @@
 [project]
 name = "sqlize"
 version = "1.0"
+license = "MIT"
 description = "Create SQL syntax with a natural python builder. Supports automatic execution on multiple connections"
 readme = "README.md"
 requires-python = ">=3.12"
