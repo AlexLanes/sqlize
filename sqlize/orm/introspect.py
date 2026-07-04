@@ -53,7 +53,7 @@ def translate (base_type: str) -> tuple[Any, str]:
     if any(t in base_type for t in ("binary", "blob", "raw")):
         return bytes, ""
     # int
-    if any(t in base_type for t in ("int", "serial")):
+    if any(t in base_type for t in ("int", "number", "serial")):
         return int, ""
     # float
     if any(t in base_type for t in ("float", "real", "double")):
