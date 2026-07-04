@@ -150,7 +150,7 @@ class ConnectionODBC (C):
         - `cursor.executemany()` auto rollback on `Exception`"""
         sql, params = (
             statement
-            .set_parameter(self.parameter, self.quote_info)
+            .set_parameter(self.data.parameter, self.data.quote_info)
             .to_sql()
         )
 
