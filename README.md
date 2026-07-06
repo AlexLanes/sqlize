@@ -4,8 +4,8 @@ Create SQL syntax with a natural python builder.
 Supports automatic execution on multiple `sqlize.connections`
 
 ### Installation
-> `uv add` **"git+https://github.com/AlexLanes/sqlize@v1.0"**  
-> `uv add` **"https://github.com/AlexLanes/sqlize/releases/download/v1.0/sqlize-1.0-py3-none-any.whl"**
+> `uv add` **"git+https://github.com/AlexLanes/sqlize@v1.1"**  
+> `uv add` **"https://github.com/AlexLanes/sqlize/releases/download/v1.1/sqlize-1.1-py3-none-any.whl"**
 
 
 ## Table | Column | Expression
