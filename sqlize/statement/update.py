@@ -6,7 +6,7 @@ from sqlize.expression import to_sql
 from sqlize.column import ColumnWithDefaultValue, AliasedExpression, ColumnEqualsValue
 from sqlize.table import Table
 from sqlize.supports import ExecutableStatement, SupportsReturning, SupportsWhere
-from sqlize.dml.interface import SQLizerModel
+from sqlize.statement.interface import SQLizerModel
 
 class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     """Builder of `Update` Statement

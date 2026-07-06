@@ -35,15 +35,18 @@ E.TRUE
 E.Value("1")
 ```
 
-### DMLs
+### Statement
+`sqlize.statement`  
 `Select` `Update` `Delete` `Insert` `InsertMany` `Upsert`  
 See `docstring` of each `Statement` for more info and examples
 
 ### Connections
+`sqlize.connections`  
 Package to automatically handle `Connections` of drivers and execute `Statements`  
 See package `docstring` for more info
 
 ### ORM
+`sqlize.orm`  
 Package for `Object Relational Mapping`  
 See package `docstring` for more info
 """
@@ -52,11 +55,11 @@ from sqlize.expression import E # Expression     Builder
 from sqlize.column     import A # AliasedColumn  Builder
 from sqlize.table      import T # Table + Column Builder
 
-# Connection
+# Connections
 from sqlize.connections import Connection, ResultSQL
 
-# DMLs
-from sqlize.dml import *
+# Statements
+from sqlize.statement import *
 
 # ORM
 from sqlize import orm

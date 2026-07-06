@@ -3,7 +3,7 @@ from typing import Callable
 # internal
 from sqlize.shared import SQLValue
 from sqlize.table import Table
-from sqlize.dml import Insert, Select
+from sqlize.statement import Insert, Select
 from sqlize.connections import Connection
 from sqlize.orm.interface import IModel
 from sqlize.orm.select import ModelSelect

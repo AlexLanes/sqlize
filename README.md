@@ -38,7 +38,8 @@ E.TRUE
 E.Value("1")
 ```
 
-## DMLs
+## Statement
+`sqlize.statement`  
 `Select` `Update` `Delete` `Insert` `InsertMany` `Upsert`
 > See `docstring` of each `Statement` for more info and examples
 ```python
@@ -74,18 +75,19 @@ sql, params = select.to_sql()
 ```
 
 ## Connections
+`sqlize.connections`  
 Package to automatically handle `Connections` of drivers and execute `Statements`
 - `Connection(conn)` Simplified wrapper to `DB API 2.0`
 - `ResultSQL` `@dataclass` used by `cursor.execute() cursor.executemany() Connection.execute()`
 
-Database         | Extra Dependency | Module
-:--------------- | :--------------: | :----:
-`SQLite`         | -                | `sqlize.connections.sqlite`
-`MySQL`          | `[mysql]`        | `sqlize.connections.mysql`
-`Oracle`         | `[oracle]`       | `sqlize.connections.oracle`
-`PostgreSQL`     | `[postgresql]`   | `sqlize.connections.postgresql`
-`MicrosoftSQL`   | `[mssql]`        | `sqlize.connections.mssql`
-`ConnectionODBC` | `[odbc]`         | `sqlize.connections.odbc`
+Database         | Extra Dependency     | Module
+:--------------- | :------------------: | :----:
+`SQLite`         | -                    | `sqlize.connections.sqlite`
+`MySQL`          | `sqlize[mysql]`      | `sqlize.connections.mysql`
+`Oracle`         | `sqlize[oracle]`     | `sqlize.connections.oracle`
+`PostgreSQL`     | `sqlize[postgresql]` | `sqlize.connections.postgresql`
+`MicrosoftSQL`   | `sqlize[mssql]`      | `sqlize.connections.mssql`
+`ConnectionODBC` | `sqlize[odbc]`       | `sqlize.connections.odbc`
 
 ```python
 from sqlize import A, T, Select
@@ -111,6 +113,7 @@ with SQLite() as conn:
 ```
 
 ## ORM
+`sqlize.orm`  
 Package for `Object Relational Mapping`
 
 > Use `sqlize.orm.introspect` to auto generate `Model`

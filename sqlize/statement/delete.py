@@ -4,7 +4,7 @@ from typing import override
 from sqlize.shared import SequenceAny
 from sqlize.table import Table
 from sqlize.supports import ExecutableStatement, SupportsReturning, SupportsWhere
-from sqlize.dml.interface import SQLizerModel
+from sqlize.statement.interface import SQLizerModel
 
 class Delete (ExecutableStatement, SupportsWhere, SupportsReturning):
     """Builder of `Delete` Statement

@@ -8,8 +8,8 @@ from sqlize.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpr
 from sqlize.table import Table
 from sqlize.supports import SupportsReturning, SupportParameters, Data
 from sqlize.connections import Connection, ResultSQL
-from sqlize.dml import Update, Insert
-from sqlize.dml.interface import SQLizerModel
+from sqlize.statement import Update, Insert
+from sqlize.statement.interface import SQLizerModel
 
 @dataclass
 class UpsertData (Data):

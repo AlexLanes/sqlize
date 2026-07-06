@@ -8,7 +8,7 @@ from sqlize.shared import SQLValue
 from sqlize.column import Column as C, AliasedColumn as A
 from sqlize.table import Table
 from sqlize.connections import Connection
-from sqlize.dml import Delete, Select, Update
+from sqlize.statement import Delete, Select, Update
 from sqlize.orm.exceptions import *
 from sqlize.orm.column import *
 from sqlize.orm.select import ModelSelect

@@ -11,7 +11,7 @@ from sqlize.expression import Expression, AliasedExpression
 from sqlize.column import Column, AliasedColumn
 from sqlize.table import Table
 from sqlize.supports import *
-from sqlize.dml.interface import SQLizerModel
+from sqlize.statement.interface import SQLizerModel
 
 @dataclass
 class SelectData (Data):

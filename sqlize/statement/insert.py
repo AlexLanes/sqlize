@@ -9,7 +9,7 @@ from sqlize.expression import AliasedExpression, to_sql
 from sqlize.column import ColumnWithDefaultValue, ColumnEqualsValue, Column, AliasedColumn
 from sqlize.table import Table
 from sqlize.supports import SupportsReturning, ExecutableStatement, Data
-from sqlize.dml.interface import SQLizerModel
+from sqlize.statement.interface import SQLizerModel
 
 @dataclass
 class InsertData[T] (Data):

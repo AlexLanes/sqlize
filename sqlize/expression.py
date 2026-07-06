@@ -9,7 +9,7 @@ from typing import (
 # internal
 from sqlize.shared import DataSQL, quote, indent, SQLValue
 if TYPE_CHECKING:
-    from sqlize.dml.select import Select, Union, Queryable
+    from sqlize.statement.select import Select, Union, Queryable
 
 type ExpOrValue  = Expression | Any
 type ExpOrString = Expression | str

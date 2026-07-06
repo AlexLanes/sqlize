@@ -2,7 +2,7 @@
 from typing import override
 # internal
 from sqlize.column import Column, AliasedColumn
-from sqlize.dml import Select
+from sqlize.statement import Select
 from sqlize.orm.interface import IModel
 from sqlize.orm.exceptions import NotFoundError
 
