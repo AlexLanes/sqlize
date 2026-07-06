@@ -1,5 +1,5 @@
 """`Connection` for `MySQL` database using external `mysql-connector-python`
-## Optional dependency `[mysql]` needed"""
+## Optional dependency `sqlize[mysql]` needed"""
 
 # std
 from typing import Any, override

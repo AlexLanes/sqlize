@@ -1,5 +1,5 @@
 """Generic `Connection` using external `pyodbc`
-## Optional dependency `[odbc]` needed"""
+## Optional dependency `sqlize[odbc]` needed"""
 
 # std
 from typing import Any, override

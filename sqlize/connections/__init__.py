@@ -2,14 +2,14 @@
 - `Connection(conn)` Simplified wrapper to `DB API 2.0`
 - `ResultSQL` `@dataclass` used by `cursor.execute() cursor.executemany() Connection.execute()`
 
-Database         | Extra Dependency | Module
-:--------------- | :--------------: | :----:
-`SQLite`         | -                | `sqlize.connections.sqlite`
-`MySQL`          | `[mysql]`        | `sqlize.connections.mysql`
-`Oracle`         | `[oracle]`       | `sqlize.connections.oracle`
-`PostgreSQL`     | `[postgresql]`   | `sqlize.connections.postgresql`
-`MicrosoftSQL`   | `[mssql]`        | `sqlize.connections.mssql`
-`ConnectionODBC` | `[odbc]`         | `sqlize.connections.odbc`
+Database         | Extra Dependency     | Module
+:--------------- | :------------------: | :----:
+`SQLite`         | -                    | `sqlize.connections.sqlite`
+`MySQL`          | `sqlize[mysql]`      | `sqlize.connections.mysql`
+`Oracle`         | `sqlize[oracle]`     | `sqlize.connections.oracle`
+`PostgreSQL`     | `sqlize[postgresql]` | `sqlize.connections.postgresql`
+`MicrosoftSQL`   | `sqlize[mssql]`      | `sqlize.connections.mssql`
+`ConnectionODBC` | `sqlize[odbc]`       | `sqlize.connections.odbc`
 """
 
 from sqlize.connections.setup import Connection, ResultSQL

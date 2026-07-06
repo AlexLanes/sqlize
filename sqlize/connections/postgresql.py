@@ -1,5 +1,5 @@
 """`Connection` for `PostgreSQL` database using external `psycopg[binary]`
-## Optional dependency `[postgresql]` needed"""
+## Optional dependency `sqlize[postgresql]` needed"""
 
 # std
 from typing import Any, override

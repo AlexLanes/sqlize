@@ -1,5 +1,5 @@
 """`Connection` for `Microsoft SQL Server` database using external `mssql-python`
-## Optional dependency `[mssql]` needed"""
+## Optional dependency `sqlize[mssql]` needed"""
 
 # std
 from typing import Any

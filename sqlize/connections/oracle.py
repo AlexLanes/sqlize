@@ -1,5 +1,5 @@
 """`Connection` for `Oracle` database using external `oracledb`
-## Optional dependency `[oracle]` needed"""
+## Optional dependency `sqlize[oracle]` needed"""
 
 # std
 from __future__ import annotations
