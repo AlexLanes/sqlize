@@ -7,8 +7,9 @@ from sqlize.expression import Expression
 from sqlize.column import ColumnEqualsValue, ColumnWithDefaultValue, AliasedExpression
 from sqlize.table import Table
 from sqlize.supports import SupportsReturning, SupportParameters, Data
-from sqlize.dml import Update, Insert
 from sqlize.connections import Connection, ResultSQL
+from sqlize.dml import Update, Insert
+from sqlize.dml.interface import SQLizerModel
 
 @dataclass
 class UpsertData (Data):
@@ -37,11 +38,17 @@ class Upsert (SupportsReturning, SupportParameters):
 
     data: UpsertData
 
-    def __init__ (self, table: Table | str, *, on: Expression) -> None:
+    def __init__ (self, table: Table | str | SQLizerModel, *, on: Expression) -> None:
         super().__init__()
         self.data = UpsertData() # type: ignore
         self.data.on = on
-        self.data.table = table if isinstance(table, Table) else Table(table, None)
+        match table:
+            case str(): self.data.table = Table(table, None)
+            case Table(): self.data.table = table
+            case _ if isinstance(table.__table__, Table):
+                self.data.table = table.__table__
+            case _:
+                self.data.table = Table(str(table.__table__), None)
 
     def __repr__ (self) -> str:
         assert self.data.table is not None
@@ -70,9 +77,9 @@ class Upsert (SupportsReturning, SupportParameters):
                 "Upsert().execute() resulted on more than 1 rowcount; "
                 "Upsert().On() should be more strict, like using a Primary Key"
             )
-        except Exception:
+        except Exception as error:
             if rollback_on_error: conn.rollback()
-            raise
+            raise Exception(f"Failed to Upsert on Update Values | {error}")
 
         # TRY INSERT
         try:
@@ -85,9 +92,9 @@ class Upsert (SupportsReturning, SupportParameters):
                 "and failed to Insert a new row"
             )
             return (False, result)
-        except Exception:
+        except Exception as error:
             if rollback_on_error: conn.rollback()
-            raise
+            raise Exception(f"Failed to Upsert on Insert Values | {error}")
 
     def WhenMatched (self, *to_update: ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression, **columns: SQLValue) -> Self:
         """Values to `Update` if matched  

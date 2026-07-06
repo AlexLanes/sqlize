@@ -3,10 +3,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import (
     Any, Self, override,
-    Iterable, Literal, NoReturn
+    Iterable, Literal, NoReturn,
+    TYPE_CHECKING
 )
 # internal
 from sqlize.shared import DataSQL, quote, indent, SQLValue
+if TYPE_CHECKING:
+    from sqlize.dml.select import Select, Union, Queryable
 
 type ExpOrValue  = Expression | Any
 type ExpOrString = Expression | str
@@ -731,9 +734,6 @@ E = EmptyExpression()
 `E.NAME(*args, sep=, paren=)`  
 Combine with `E.Value()` `E.Literal()`
 """
-
-# Avoids Circular Reference
-from .dml.select import Select, Union, Queryable
 
 __all__ = [
     "E",

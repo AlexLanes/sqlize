@@ -6,6 +6,7 @@ from sqlize.expression import to_sql
 from sqlize.column import ColumnWithDefaultValue, AliasedExpression, ColumnEqualsValue
 from sqlize.table import Table
 from sqlize.supports import ExecutableStatement, SupportsReturning, SupportsWhere
+from sqlize.dml.interface import SQLizerModel
 
 class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
     """Builder of `Update` Statement
@@ -50,11 +51,17 @@ class Update (ExecutableStatement, SupportsWhere, SupportsReturning):
 
     data_set: list[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
 
-    def __init__ (self, table: Table | str, *, allow_empty_where=False) -> None:
+    def __init__ (self, table: Table | str | SQLizerModel, *, allow_empty_where=False) -> None:
         super().__init__()
         self.data_set = []
         setattr(self, "allow_empty_where", allow_empty_where)
-        self.data.table = table if isinstance(table, Table) else Table(table, None)
+        match table:
+            case str(): self.data.table = Table(table, None)
+            case Table(): self.data.table = table
+            case _ if isinstance(table.__table__, Table):
+                self.data.table = table.__table__
+            case _:
+                self.data.table = Table(str(table.__table__), None)
 
     def __repr__ (self) -> str:
         assert self.data.table is not None

@@ -6,11 +6,12 @@ from typing import (
     Iterable, override
 )
 # internal
-from sqlize.shared     import SequenceAny, DataSQL, indent
+from sqlize.shared import SequenceAny, DataSQL, indent
 from sqlize.expression import Expression, AliasedExpression
-from sqlize.column     import Column, AliasedColumn
-from sqlize.table      import Table
-from sqlize.supports   import *
+from sqlize.column import Column, AliasedColumn
+from sqlize.table import Table
+from sqlize.supports import *
+from sqlize.dml.interface import SQLizerModel
 
 @dataclass
 class SelectData (Data):
@@ -368,8 +369,15 @@ class Select (Queryable, SupportsWhere):
         self.data.top = rows
         return self
 
-    def From (self, table: Table | CteTable) -> Self:
+    def From (self, table: Table | CteTable | SQLizerModel) -> Self:
         """Add `table` to Select `FROM`"""
+        match table:
+            case str(): table = Table(table, None)
+            case Table(): pass
+            case _ if isinstance(table.__table__, Table):
+                table = table.__table__
+            case _:
+                table = Table(str(table.__table__), None)
         self.data.table = table
         return self
 
@@ -383,27 +391,55 @@ class Select (Queryable, SupportsWhere):
     # JOINS #
     #-------#
 
-    def Join (self, table: Table | CteTable, on: Expression) -> Self:
+    def Join (self, table: Table | CteTable | SQLizerModel, on: Expression) -> Self:
         """Apply `INNER JOIN {table} ON {on}`
         - `Join(T.orders, T.orders.user_id == T.users.id)`"""
+        match table:
+            case str(): table = Table(table, None)
+            case Table(): pass
+            case _ if isinstance(table.__table__, Table):
+                table = table.__table__
+            case _:
+                table = Table(str(table.__table__), None)
         self.data.joins.append(("INNER", table, on))
         return self
 
-    def LeftJoin (self, table: Table | CteTable, on: Expression) -> Self:
+    def LeftJoin (self, table: Table | CteTable | SQLizerModel, on: Expression) -> Self:
         """Apply `LEFT JOIN {table} ON {on}`
         - `LeftJoin(T.orders, T.orders.user_id == T.users.id)`"""
+        match table:
+            case str(): table = Table(table, None)
+            case Table(): pass
+            case _ if isinstance(table.__table__, Table):
+                table = table.__table__
+            case _:
+                table = Table(str(table.__table__), None)
         self.data.joins.append(("LEFT", table, on))
         return self
 
-    def RightJoin (self, table: Table | CteTable, on: Expression) -> Self:
+    def RightJoin (self, table: Table | CteTable | SQLizerModel, on: Expression) -> Self:
         """Apply `RIGHT JOIN {table} ON {on}`
         - `RightJoin(T.orders, T.orders.user_id == T.users.id)`"""
+        match table:
+            case str(): table = Table(table, None)
+            case Table(): pass
+            case _ if isinstance(table.__table__, Table):
+                table = table.__table__
+            case _:
+                table = Table(str(table.__table__), None)
         self.data.joins.append(("RIGHT", table, on))
         return self
 
-    def FullJoin (self, table: Table | CteTable, on: Expression) -> Self:
+    def FullJoin (self, table: Table | CteTable | SQLizerModel, on: Expression) -> Self:
         """Apply `FULL JOIN {table} ON {on}`
         - `FullJoin(T.orders, T.orders.user_id == T.users.id)`"""
+        match table:
+            case str(): table = Table(table, None)
+            case Table(): pass
+            case _ if isinstance(table.__table__, Table):
+                table = table.__table__
+            case _:
+                table = Table(str(table.__table__), None)
         self.data.joins.append(("FULL", table, on))
         return self
 

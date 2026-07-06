@@ -9,6 +9,7 @@ from sqlize.expression import AliasedExpression, to_sql
 from sqlize.column import ColumnWithDefaultValue, ColumnEqualsValue, Column, AliasedColumn
 from sqlize.table import Table
 from sqlize.supports import SupportsReturning, ExecutableStatement, Data
+from sqlize.dml.interface import SQLizerModel
 
 @dataclass
 class InsertData[T] (Data):
@@ -225,10 +226,16 @@ class Insert (ExecutableStatement, SupportsReturning, SupportsConflicts):
 
     data: InsertData[ColumnEqualsValue | ColumnWithDefaultValue | AliasedExpression]
 
-    def __init__ (self, into: Table | str) -> None:
+    def __init__ (self, into: Table | str | SQLizerModel) -> None:
         super().__init__()
         self.data = InsertData() # type: ignore
-        self.data.table = into if isinstance(into, Table) else Table(into, None)
+        match into:
+            case str(): self.data.table = Table(into, None)
+            case Table(): self.data.table = into
+            case _ if isinstance(into.__table__, Table):
+                self.data.table = into.__table__
+            case _:
+                self.data.table = Table(str(into.__table__), None)
 
     def __repr__ (self) -> str:
         assert self.data.table is not None
@@ -341,10 +348,16 @@ class InsertMany (ExecutableStatement, SupportsReturning, SupportsConflicts):
 
     data: InsertData[ColumnEqualsValue]
 
-    def __init__ (self, into: Table | str) -> None:
+    def __init__ (self, into: Table | str | SQLizerModel) -> None:
         super().__init__()
         self.data = InsertData() # type: ignore
-        self.data.table = into if isinstance(into, Table) else Table(into, None)
+        match into:
+            case str(): self.data.table = Table(into, None)
+            case Table(): self.data.table = into
+            case _ if isinstance(into.__table__, Table):
+                self.data.table = into.__table__
+            case _:
+                self.data.table = Table(str(into.__table__), None)
 
     def __repr__ (self) -> str:
         assert self.data.table is not None
