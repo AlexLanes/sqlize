@@ -1,22 +1,24 @@
 # std
 from typing import (
     Any, Self, get_args,
-    dataclass_transform,
     get_type_hints, get_origin
 )
 # internal
-from sqlize.shared import SQLValue, stringify
+from sqlize.shared import SQLValue
+from sqlize.column import Column as C, AliasedColumn as A
 from sqlize.table import Table
 from sqlize.connections import Connection
-from sqlize.dml import Select, Delete, Update
+from sqlize.dml import Delete, Select, Update
 from sqlize.orm.exceptions import *
 from sqlize.orm.column import *
 from sqlize.orm.select import ModelSelect
 from sqlize.orm.insert import ModelInsert
+# external
+import msgspec
 
-@dataclass_transform(eq_default=False, kw_only_default=True)
 class SQLizer:
     """`Base Model` used as inheritance
+    - External `msgspec` used for validation and serialization
     - `__table__` to set the name of table `Default: str(Model.__name__)`
     - `Model.property` are transformed into `Columns`
     - `Instance.property` type is preserved
@@ -80,17 +82,24 @@ class SQLizer:
     __data__: ModelData
 
     def __init__ (self, **kwargs: SQLValue) -> None:
-        data = self.__data__
-        for name, value in kwargs.items():
-            if name in data.infos:
-                setattr(self, name, value)
-            elif alias := data.alias.get(name):
-                setattr(self, alias, value)
-            else: raise AttributeError(
-                f"Unexpected atribute for {self.__class__.__name__}({name}={value!r})",
-                name = name,
-                obj = self
-            )
+        data = msgspec.convert(kwargs, self.__data__.struct, strict=False)
+        for name in data.__struct_fields__:
+            setattr(self, name, getattr(data, name))
+
+    @classmethod
+    def from_json (cls, json: bytes | str) -> Self:
+        """Decode `JSON Object` to `Model`"""
+        data = msgspec.json.decode(
+            json,
+            type = cls.__data__.struct,
+            strict = False
+        )
+
+        obj = object.__new__(cls)
+        for name in data.__struct_fields__:
+            setattr(obj, name, getattr(data, name))
+
+        return obj
 
     def __init_subclass__ (cls) -> None:
         super().__init_subclass__()
@@ -99,11 +108,10 @@ class SQLizer:
         if not isinstance(table, Table):
             table = Table(str(table), None)
 
-        data = ModelData(table, {}, {})
-        cls.__data__ = data
+        pk_seen = False
+        infos_map = dict[str, ColumnInfo]()
 
         # Class Defaults with Alias
-        pk_seen = False
         for name, hint in cls.__dict__.items():
             if not isinstance(hint, Column): continue
             if not (orig := getattr(hint, "__orig_class__", None)):
@@ -115,13 +123,16 @@ class SQLizer:
 
             pk_seen = is_pk
             pytype = get_args(orig)[0]
-            alias = str(hint.column)
-            column = table.Column(alias)
+            column = table.Column(
+                # Alias
+                str(hint.column)
+                if isinstance(hint.column, str)
+                else hint.column.name
+            )
 
             # Update Class Descriptor
             hint.column = column
-            data.alias[alias] = name
-            data.infos[name] = ColumnInfo(pytype, column, is_pk)
+            infos_map[name] = ColumnInfo(name, pytype, column, is_pk)
 
         # Class Annotations
         for name, hint in get_type_hints(cls, include_extras=True).items():
@@ -140,16 +151,33 @@ class SQLizer:
             # Class.attribute -> Column[T]
             pytype = get_args(hint)[0]
             column = table.Column(name)
-            data.infos[name] = ColumnInfo(pytype, column, is_pk)
+            infos_map[name] = ColumnInfo(name, pytype, column, is_pk)
 
             # Instance.attribute -> T
             descriptor = origin(column=column)
             descriptor.__set_name__(cls, name)
             setattr(cls, name, descriptor)
 
+        # Class Vars
+        cls.__table__ = table
+        cls.__data__  = ModelData(table, infos_map, msgspec.defstruct(
+            eq = False,
+            name = cls.__name__,
+            module = cls.__module__,
+            forbid_unknown_fields = True,
+            fields = [
+                (name, info.pytype)
+                for name, info in infos_map.items()
+            ],
+        ))
+
     def __repr__ (self) -> str:
         name = self.__class__.__name__
-        return f"<{name} {self.to_dict()}>"
+        kwargs = ", ".join(
+            f"{name}={value!r}"
+            for name, value in self.__dict__.items()
+        )
+        return f"<{name}({kwargs})>"
 
     def __eq__ (self, other: object) -> bool:
         return (
@@ -159,12 +187,33 @@ class SQLizer:
         )
 
     def to_dict (self) -> dict[str, Any]:
-        """transforms `Model` to `dict[str, Any]`"""
-        return dict(self.__dict__)
+        """Format `Model` to `dict[str, Any]`"""
+        return msgspec.structs.asdict(
+            msgspec.convert(
+                self,
+                self.__data__.struct,
+                strict = False,
+                from_attributes = True
+            )
+        )
+
+    def to_json (self) -> bytes:
+        """Encode `Model` to `bytes` of `JSON Object`"""
+        return msgspec.json.encode(
+            msgspec.convert(
+                self,
+                self.__data__.struct,
+                strict = False,
+                from_attributes = True
+            )
+        )
 
     def stringify (self, indent: bool = False) -> str:
-        """Tranforms `Model` to `JSON String`"""
-        return stringify(self.to_dict(), indent=indent)
+        """Format `Model` to `JSON String`"""
+        return msgspec.json.format(
+            self.to_json().decode(),
+            indent = 4 if indent else 0
+        )
 
     @staticmethod
     def GetConnection () -> Connection:
@@ -179,26 +228,29 @@ class SQLizer:
     # ------ #
 
     @classmethod
+    def Columns (cls) -> list[C | A]:
+        """All `Columns` of `Model`"""
+        return list(cls.__data__.sql_columns)
+
+    @classmethod
     def Get (cls, pk: SQLValue) -> Self:
         """Select row of `Model` by `PrimaryKey` value
         - `@classmethod`
-        - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
+        - `ValueError` `NotFoundError` `MultipleResultsError`"""
         data = cls.__data__
-        primary_key = data.primary_key
-        if primary_key is None:
+        if data.pk is None:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {cls.__name__}.Get({pk=})", obj=cls)
 
         # Validate Value
-        pk_name = data.alias.get(primary_key.name, primary_key.name)
-        expected = data.infos[pk_name].pytype
-        if not isinstance(pk, expected):
-            raise ValueError(f"Mismatch value for PrimaryKey {cls.__name__}.Get({pk=}) | {cls.__name__}.{pk_name} expects {expected}")
+        try: pk = msgspec.convert(pk, data.pk.pytype, strict=False)
+        except msgspec.ValidationError as error:
+            raise ValueError(f"Mismatch value for PrimaryKey {cls.__name__}.Get({pk=}) | {cls.__name__}.{data.pk.name} {error}") from None
 
         # SELECT
         result = cls.GetConnection().execute(
-            Select(*data.all_columns)
+            Select(*cls.Columns())
             .From(data.table)
-            .Where(primary_key == pk)
+            .Where(data.pk.column == pk)
         )
 
         match result.returned:
@@ -207,7 +259,7 @@ class SQLizer:
                 raise NotFoundError(
                     f"No Result for {cls.__name__}.Get({pk=})",
                     cls = cls,
-                    values = { pk_name: pk }
+                    values = { data.pk.name: pk }
                 )
             case _:
                 raise MultipleResultsError(
@@ -221,9 +273,10 @@ class SQLizer:
         - `@classmethod`
         - New Methods `All()` `First()` `Count()`
         ### Example
+        `Model.Select().Count()`  
         `Model.Select().Where(Model.id < 100).All()`  
         `Model.Select().OrderBy(Model.id.DESC).Limit(1).First()`"""
-        return ModelSelect(*cls.__data__.all_columns, model=cls)
+        return ModelSelect(*cls.Columns(), model=cls)
 
     # ------ #
     # Delete #
@@ -231,33 +284,29 @@ class SQLizer:
 
     def Remove (self) -> None:
         """Delete row of `Model` object by `PrimaryKey` value
-        - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
+        - `NotFoundError` `MultipleResultsError`"""
         data = self.__data__
-        pk = data.primary_key
-        if pk is None:
+        if data.pk is None:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self.__class__.__name__}().Remove()", obj=type(self))
 
-        pk_name = data.alias.get(pk.name, pk.name)
-        pk_value = getattr(self, pk_name)
-        delete = Delete(data.table).Where(pk == pk_value)
+        pk_value = getattr(self, data.pk.name)
+        delete = Delete(data.table).Where(data.pk.column == pk_value)
         rowcount = self.GetConnection().execute(delete).rowcount
 
         match rowcount:
             case 1: return
             case 0:
                 error = NotFoundError(
-                    f"No Result for {self.__class__.__name__}({pk_name}={pk_value!r}).Remove()",
+                    f"No Result for {self.__class__.__name__}({data.pk.name}={pk_value!r}).Remove()",
                     cls = type(self),
                     values = self.to_dict()
                 )
-                error.add_note(repr(self))
                 raise error
             case _:
                 error = MultipleResultsError(
-                    f"Multiple Results({ rowcount }) for {self.__class__.__name__}({pk_name}={pk_value!r}).Remove(). "
+                    f"Multiple Results({ rowcount }) for {self.__class__.__name__}({data.pk.name}={pk_value!r}).Remove(). "
                     "PrimaryKey should match 1 row only"
                 )
-                error.add_note(repr(self))
                 raise error
 
     @classmethod
@@ -265,22 +314,20 @@ class SQLizer:
         """Delete row of `Model` by `PrimaryKey` value
         - Returns `deleted: bool`
         - `@classmethod`
-        - `NotFoundError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
+        - `ValueError` `NotFoundError` `MultipleResultsError`"""
         data = cls.__data__
-        primary_key = data.primary_key
-        if primary_key is None:
+        if data.pk is None:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {cls.__name__}.Delete({pk=})", obj=cls)
 
         # Validate Value
-        pk_name = data.alias.get(primary_key.name, primary_key.name)
-        expected = data.infos[pk_name].pytype
-        if not isinstance(pk, expected):
-            raise ValueError(f"Mismatch value for PrimaryKey {cls.__name__}.Delete({pk=}) | {cls.__name__}.{pk_name} expects {expected}")
+        try: pk = msgspec.convert(pk, data.pk.pytype, strict=False)
+        except msgspec.ValidationError as error:
+            raise ValueError(f"Mismatch value for PrimaryKey {cls.__name__}.Delete({pk=}) | {cls.__name__}.{data.pk.name} {error}") from None
 
         # DELETE
         result = cls.GetConnection().execute(
             Delete(data.table)
-            .Where(primary_key == pk)
+            .Where(data.pk.column == pk)
         )
 
         match result.rowcount:
@@ -289,7 +336,7 @@ class SQLizer:
             case 0: raise NotFoundError(
                 f"No Result for {cls.__name__}.Delete({pk=})",
                 cls = cls,
-                values = { pk_name: pk }
+                values = { data.pk.name: pk }
             )
             case _: raise MultipleResultsError(
                 f"Multiple Results({ result.rowcount }) for {cls.__name__}.Delete({pk=}). "
@@ -302,26 +349,27 @@ class SQLizer:
 
     def Update (self, **columns: SQLValue) -> Self:
         """Update row of `Model` by `PrimaryKey` value
-        - `columns` used to update `self` before executing `Update`
+        - `columns` to update `self` before executing `Update`
         - `Refresh()` can be chained to sync with `Connection`
-        - `UpdateError` `MultipleResultsError` `PrimaryKeyNotSetError`"""
+        - `ValueError` `AttributeError` `UpdateError` `MultipleResultsError`"""
         data = self.__data__
-        pk = data.primary_key
-        if pk is None:
+        if data.pk is None:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self.__class__.__name__}().Update()", obj=type(self))
 
         infos = data.infos
         for name, value in columns.items():
             if name not in infos:
                 raise AttributeError(
-                    f"Unexpected atribute for {self.__class__.__name__}().Update({name}={value!r})",
+                    f"Unexpected attribute for {self.__class__.__name__}().Update({name}={value!r})",
                     name = name,
                     obj = self
                 )
+            try: value = msgspec.convert(value, data.infos[name].pytype, strict=False)
+            except msgspec.ValidationError as error:
+                raise ValueError(f"Mismatch value for {self.__class__.__name__}().Update({name}={value!r}) | {self.__class__.__name__}.{name} {error}") from None
             setattr(self, name, value)
 
-        pk_name = data.alias.get(pk.name, pk.name)
-        pk_value = getattr(self, pk_name)
+        pk_value = getattr(self, data.pk.name)
         try:
             result = self.GetConnection().execute(
                 Update(data.table)
@@ -330,10 +378,10 @@ class SQLizer:
                     for name, info in data.infos.items()
                     if not info.is_pk
                 })
-                .Where(pk == pk_value)
+                .Where(data.pk.column == pk_value)
             )
-        except Exception:
-            error = UpdateError(f"Update failed for {self.__class__.__name__}({pk_name}={pk_value!r}).Update()")
+        except Exception as error:
+            error = UpdateError(f"Update failed for {self.__class__.__name__}({data.pk.name}={pk_value!r}).Update() | {error}")
             error.add_note(repr(self))
             raise error
 
@@ -341,7 +389,7 @@ class SQLizer:
             case 1 | 0: return self
             case _:
                 error = MultipleResultsError(
-                    f"Multiple Results({ result.rowcount }) for {self.__class__.__name__}({pk_name}={pk_value!r}).Update(). "
+                    f"Multiple Results({ result.rowcount }) for {self.__class__.__name__}({data.pk.name}={pk_value!r}).Update(). "
                     "PrimaryKey should match 1 row only"
                 )
                 error.add_note(repr(self))
@@ -349,16 +397,14 @@ class SQLizer:
 
     def Refresh (self) -> Self:
         """Refresh columns of `Model` object by `PrimaryKey` value
-        - `NotFoundError` `PrimaryKeyNotSetError`"""
+        - `NotFoundError` `MultipleResultsError`"""
         data = self.__data__
-        pk = data.primary_key
-        if pk is None:
+        if data.pk is None:
             raise PrimaryKeyNotSetError(f"No PrimaryKey set for {self.__class__.__name__}().Refresh()", obj=type(self))
 
-        updated = self.Get(pk = getattr(self, data.alias.get(pk.name, pk.name)))
-        for name, info in data.infos.items():
-            if info.is_pk: continue
-            value = getattr(updated, name)
+        updated = self.Get(pk = getattr(self, data.pk.name))
+        for name, value in updated.__dict__.items():
+            if name == data.pk.name: continue
             setattr(self, name, value)
 
         return self
@@ -373,20 +419,26 @@ class SQLizer:
         - Avoid when a `PrimaryKey` don't exists on `Model` or `columns`
         - Efficient with `SQLite` `PostgreSQL` `MicrosoftSQL` `MySQL + PK`
         - `@classmethod`
-        - `InsertError` `AttributeError`"""
+        - `ValueError` `AttributeError` `InsertError`"""
+        data = cls.__data__
         assert columns, f"At least 1 Column needed for {cls.__name__}.Insert()"
 
-        infos = cls.__data__.infos
-        for name, value in columns.items():
-            if name not in infos:
+        for name in columns:
+            value = columns[name]
+            if name not in data.infos:
                 raise AttributeError(
-                    f"Unexpected atribute for {cls.__name__}.Insert({name}={value!r})",
+                    f"Unexpected attribute for {cls.__name__}.Insert({name}={value!r})",
                     name = name,
                     obj = cls
                 )
+            try: columns[name] = msgspec.convert(value, data.infos[name].pytype, strict=False)
+            except msgspec.ValidationError as error:
+                raise ValueError(f"Mismatch value for {cls.__name__}.Insert({name}={value!r}) | {cls.__name__}.{name} {error}") from None
 
         try: return ModelInsert(cls).insert_for_connection(columns)
-        except Exception:
-            raise InsertError(f"Insert failed for {cls.__name__}.Insert({ columns })")
+        except Exception as error:
+            error = InsertError(f"Insert failed for {cls.__name__}.Insert({ columns }) | {error}")
+            error.add_note(repr(columns))
+            raise error
 
 __all__ = ["SQLizer"]

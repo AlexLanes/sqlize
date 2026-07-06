@@ -40,7 +40,7 @@ class ModelInsert[T: IModel]:
                 for name, info in data.infos.items()
                 if name in insert
             })
-            .Returning(*data.all_columns)
+            .Returning(*data.sql_columns)
         )
         assert result, "Unexpected ResultSQL after Insert, no rowcount or rows returned"
         return model(**result.first)
@@ -57,8 +57,11 @@ class ModelInsert[T: IModel]:
                 if name in insert
             })
             .Output(*(
-                inserted.Column(column.name)
-                for column in data.all_columns
+                inserted.Column(name)
+                if name == info.column.name
+                else inserted.Column(info.column.name).As(name)
+
+                for name, info in data.infos.items()
             ))
         )
         assert result, "Unexpected ResultSQL after Insert, no rowcount or rows returned"
@@ -70,7 +73,6 @@ class ModelInsert[T: IModel]:
 
         model = self.model
         data = model.__data__
-        pk = data.primary_key
 
         result = connection.execute(
             Insert(data.table)
@@ -84,19 +86,19 @@ class ModelInsert[T: IModel]:
 
         # PrimaryKey
         if (lastrowid := connection.lastrowid):
-            if pk is None:
+            if data.pk is None:
                 raise PrimaryKeyNotSetError(f"Expected a PrimaryKey for {model.__name__}", obj=model)
             result = connection.execute(
-                Select(*data.all_columns)
+                Select(*data.sql_columns)
                 .From(data.table)
-                .Where(pk == lastrowid)
+                .Where(data.pk.column == lastrowid)
             )
-            assert result, f"Unexpected ResultSQL after Insert. AUTO_INCREMENT {lastrowid} not found for {model.__name__}.{data.alias.get(pk.name, pk.name)}"
+            assert result, f"Unexpected ResultSQL after Insert. AUTO_INCREMENT {lastrowid} not found for {model.__name__}.{data.pk.name}"
             return model(**result.first)
 
         # Get Last by Values Inserted
         select = (
-            ModelSelect(*data.all_columns, model=model)
+            ModelSelect(*data.sql_columns, model=model)
             .WhereEquals(*(
                 info.column == insert[name]
                 for name, info in data.infos.items()
@@ -121,7 +123,7 @@ class ModelInsert[T: IModel]:
 
         # Get Last by Values Inserted
         return (
-            ModelSelect(*data.all_columns, model=model)
+            ModelSelect(*data.sql_columns, model=model)
             .WhereEquals(*(
                 info.column == insert[name]
                 for name, info in data.infos.items()

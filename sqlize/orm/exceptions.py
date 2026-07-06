@@ -11,6 +11,7 @@ class NotFoundError (Exception):
         super().__init__(*args)
         self.cls = cls
         self.values = values
+        self.add_note(repr(self.values))
 
 class NoConnectionAvailableError (Exception):
     def __init__ (self) -> None:

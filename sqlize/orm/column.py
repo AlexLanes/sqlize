@@ -5,8 +5,10 @@ from typing import overload, override
 # internal
 from sqlize.shared import SQLValue
 from sqlize.table import Table
-from sqlize.column import Column as C
+from sqlize.column import Column as C, AliasedColumn as A
 from sqlize.orm.exceptions import PrimaryKeyNotSetError
+# external
+import msgspec
 
 class Column[T: SQLValue]:
 
@@ -40,7 +42,7 @@ class Column[T: SQLValue]:
         # Instance.attribute -> type[T]
         try: return instance.__dict__[self.name]
         except KeyError:
-            msg = f"Atribute {instance.__class__.__name__}.{self.name} of instance has not been set"
+            msg = f"Attribute {instance.__class__.__name__}.{self.name} of instance has not been set"
             error = (
                 PrimaryKeyNotSetError(msg, name=self.name, obj=instance)
                 if self.__class__ is PrimaryKey
@@ -58,6 +60,8 @@ class PrimaryKey[T: SQLValue] (Column[T]):
 
 @dataclass(slots=True, frozen=True)
 class ColumnInfo:
+    name: str
+    """`property_name`"""
     pytype: type
     column: C
     is_pk: bool
@@ -67,36 +71,27 @@ class ModelData:
     table: Table
     infos: dict[str, ColumnInfo]
     """`{ property_name: ColumnInfo }`"""
-    alias: dict[str, str]
-    """`{ alias: property_name }`"""
-
-    @property
-    def all_columns (self) -> list[C]:
-        """PK + Columns"""
-        return (
-            [self.primary_key, *self.columns]
-            if self.primary_key is not None
-            else list(self.columns)
-        )
+    struct: type[msgspec.Struct]
 
     @cached_property
-    def columns (self) -> list[C]:
-        """No Primary Key"""
-        return [
-            info.column
-            for info in self.infos.values()
-            if not info.is_pk
-        ]
-
-    @cached_property
-    def primary_key (self) -> C | None:
+    def pk (self) -> ColumnInfo | None:
         return (
             [
-                info.column
+                info
                 for info in self.infos.values()
                 if info.is_pk
             ] or [None]
         )[0]
+
+    @cached_property
+    def sql_columns (self) -> list[C | A]:
+        return [
+            info.column
+            if name == info.column.name
+            else info.column.As(name)
+
+            for name, info in self.infos.items()
+        ]
 
 __all__ = [
     "Column",

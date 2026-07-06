@@ -1,10 +1,6 @@
 # std
 from __future__ import annotations
 from dataclasses import dataclass
-from json import dumps
-from decimal import Decimal
-from dataclasses import dataclass
-from datetime import datetime, date, time
 from typing import (
     Any, Self, overload,
     Iterable, Sequence, Mapping
@@ -29,37 +25,10 @@ def quote (s: str, quote_info: tuple[bool, str] | None = None) -> str:
     return f"{char}{s}{char}" if enforce or " " in s else s
 
 def indent (sql: str) -> str:
-    """Indent lines do `sql` by 4 spaces"""
+    """Indent lines of `sql` by 4 spaces"""
     return "\n".join(
         "    " + line
         for line in sql.split("\n")
-    )
-
-def stringify (item: Any, indent: bool = False) -> str:
-    """Transforms `item` to `JSON String`"""
-    def defaults (item: Any) -> Any:
-        match item:
-            case None: return "null"
-            case bool(): return "true" if item else "false"
-            case str() | int() | float(): return item
-            case datetime(): return item.isoformat(sep="T", timespec="seconds")
-            case time(): return item.isoformat(timespec="seconds")
-            case date(): return item.isoformat()
-            case Decimal(): return float(item)
-            case _ if hasattr(item, "__iter__"):
-                return [defaults(x) for x in item]
-            case _ if data := getattr(item, "__dict__", {}):
-                return {
-                    str(key): defaults(value)
-                    for key, value in data.items()
-                }
-            case _: return str(item)
-
-    return dumps(
-        item,
-        indent = 4 if indent else None,
-        default = defaults,
-        ensure_ascii = False,
     )
 
 @dataclass(kw_only=True)
@@ -140,7 +109,6 @@ __all__ = [
     "DataSQL",
     "SQLValue",
     "TableData",
-    "stringify",
     "ColumnData",
     "MappingAny",
     "SequenceAny",

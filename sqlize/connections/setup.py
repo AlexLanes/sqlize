@@ -4,8 +4,10 @@ from dataclasses import dataclass
 from typing import Protocol, Self, Iterator, Callable
 # internal
 from sqlize.parameters import *
-from sqlize.shared import SequenceAny, ManySequenceAny, MappingAny, SQLValue, stringify
+from sqlize.shared import SequenceAny, ManySequenceAny, MappingAny, SQLValue
 from sqlize.supports import ExecutableStatement, SupportParameters
+# external
+import msgspec
 
 class ICursorPEP249 (Protocol):
     def __iter__ (self) -> Self: ...
@@ -100,7 +102,10 @@ class ResultSQL:
 
     def stringify (self, indent: bool = False) -> str:
         """Transforms `result.to_dict()` to `JSON String`"""
-        return stringify(self.to_dict(), indent)
+        return msgspec.json.format(
+            msgspec.json.encode(self.to_dict()).decode(),
+            indent = 4 if indent else 0
+        )
 
     def print (self) -> None:
         """Print to `console`"""
